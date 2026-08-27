@@ -1,0 +1,442 @@
+{
+  "generatedAt": "2026-08-27T00:25:06.035Z",
+  "note": "Generado por src/build-seed.ts. Cada QID está verificado contra Wikidata.",
+  "totalNotableWorks": 2163,
+  "museums": [
+    {
+      "qid": "Q19675",
+      "name": "Museo del Louvre",
+      "city": "Saint-Germain-l'Auxerrois",
+      "country": "Francia",
+      "lat": 48.861111111,
+      "lng": 2.335833333,
+      "notableWorks": 332
+    },
+    {
+      "qid": "Q160112",
+      "name": "Museo del Prado",
+      "city": "Madrid",
+      "country": "España",
+      "lat": 40.413888888,
+      "lng": -3.692222222,
+      "notableWorks": 296
+    },
+    {
+      "qid": "Q180788",
+      "name": "National Gallery de Londres",
+      "city": "Ciudad de Westminster",
+      "country": "Reino Unido",
+      "lat": 51.508888888,
+      "lng": -0.128333333,
+      "notableWorks": 270
+    },
+    {
+      "qid": "Q51252",
+      "name": "Galería Uffizi",
+      "city": "Florencia",
+      "country": "Italia",
+      "lat": 43.768333333,
+      "lng": 11.255277777,
+      "notableWorks": 162
+    },
+    {
+      "qid": "Q23402",
+      "name": "Museo de Orsay",
+      "city": "VII Distrito de París",
+      "country": "Francia",
+      "lat": 48.859972,
+      "lng": 2.326527,
+      "notableWorks": 160
+    },
+    {
+      "qid": "Q95569",
+      "name": "Museo de Historia del Arte de Viena",
+      "city": "Viena",
+      "country": "Austria",
+      "lat": 48.203880555,
+      "lng": 16.3616,
+      "notableWorks": 104
+    },
+    {
+      "qid": "Q165631",
+      "name": "Gemäldegalerie de Berlín",
+      "city": "Mitte",
+      "country": "Alemania",
+      "lat": 52.508611111,
+      "lng": 13.364722222,
+      "notableWorks": 85
+    },
+    {
+      "qid": "Q290549",
+      "name": "Museo Nacional de Capodimonte",
+      "city": "Nápoles",
+      "country": "Italia",
+      "lat": 40.86699,
+      "lng": 14.250346,
+      "notableWorks": 61
+    },
+    {
+      "qid": "Q154568",
+      "name": "Pinacoteca Antigua de Múnich",
+      "city": "Múnich",
+      "country": "Alemania",
+      "lat": 48.148291,
+      "lng": 11.569985,
+      "notableWorks": 55
+    },
+    {
+      "qid": "Q195436",
+      "name": "Tate Britain",
+      "city": "Ciudad de Westminster",
+      "country": "Reino Unido",
+      "lat": 51.491062,
+      "lng": -0.127789,
+      "notableWorks": 46
+    },
+    {
+      "qid": "Q150066",
+      "name": "Pinacoteca de Brera",
+      "city": "Milán",
+      "country": "Italia",
+      "lat": 45.471955,
+      "lng": 9.187815,
+      "notableWorks": 46
+    },
+    {
+      "qid": "Q239303",
+      "name": "Instituto de Arte de Chicago",
+      "city": "Chicago",
+      "country": "Estados Unidos",
+      "lat": 41.879444444,
+      "lng": -87.623888888,
+      "notableWorks": 40,
+      "api": "aic"
+    },
+    {
+      "qid": "Q49133",
+      "name": "Museo de Bellas Artes de Boston",
+      "city": "Boston",
+      "country": "Estados Unidos",
+      "lat": 42.339444444,
+      "lng": -71.094166666,
+      "notableWorks": 37
+    },
+    {
+      "qid": "Q188740",
+      "name": "Museo de Arte Moderno",
+      "city": "Manhattan",
+      "country": "Estados Unidos",
+      "lat": 40.761444444,
+      "lng": -73.977611111,
+      "notableWorks": 36
+    },
+    {
+      "qid": "Q731126",
+      "name": "Museo J. Paul Getty",
+      "city": "Los Ángeles",
+      "country": "Estados Unidos",
+      "lat": 34.0775,
+      "lng": -118.475,
+      "notableWorks": 34
+    },
+    {
+      "qid": "Q176251",
+      "name": "Museo Nacional Thyssen-Bornemisza",
+      "city": "Madrid",
+      "country": "España",
+      "lat": 40.416041,
+      "lng": -3.694925,
+      "notableWorks": 31
+    },
+    {
+      "qid": "Q861252",
+      "name": "Museo Nacional de Arte de Cataluña",
+      "city": "Sants-Montjuic",
+      "country": "España",
+      "lat": 41.368333333,
+      "lng": 2.153305555,
+      "notableWorks": 29
+    },
+    {
+      "qid": "Q841506",
+      "name": "Galería Borghese",
+      "city": "Roma Capitale",
+      "country": "Italia",
+      "lat": 41.91421,
+      "lng": 12.492144,
+      "notableWorks": 26
+    },
+    {
+      "qid": "Q942713",
+      "name": "Galería nacional de Escocia",
+      "city": "City de Edimburgo",
+      "country": "Reino Unido",
+      "lat": 55.950902,
+      "lng": -3.195686,
+      "notableWorks": 25
+    },
+    {
+      "qid": "Q224124",
+      "name": "Museo van Gogh",
+      "city": "Amsterdam",
+      "country": "Países Bajos",
+      "lat": 52.358333333,
+      "lng": 4.881111111,
+      "notableWorks": 24
+    },
+    {
+      "qid": "Q377500",
+      "name": "Museos Reales de Bellas Artes de Bélgica",
+      "city": "Región de Bruselas-Capital",
+      "country": "Bélgica",
+      "lat": 50.84168,
+      "lng": 4.358238,
+      "notableWorks": 23
+    },
+    {
+      "qid": "Q182955",
+      "name": "Museos Vaticanos",
+      "city": "Ciudad del Vaticano",
+      "country": "Ciudad del Vaticano",
+      "lat": 41.906388888,
+      "lng": 12.454444444,
+      "notableWorks": 22
+    },
+    {
+      "qid": "Q510324",
+      "name": "Museo de Arte de Filadelfia",
+      "city": "Filadelfia",
+      "country": "Estados Unidos",
+      "lat": 39.965833333,
+      "lng": -75.181388888,
+      "notableWorks": 22
+    },
+    {
+      "qid": "Q671384",
+      "name": "Galería Nacional de Dinamarca",
+      "city": "Copenhague",
+      "country": "Dinamarca",
+      "lat": 55.68889,
+      "lng": 12.57861,
+      "notableWorks": 21
+    },
+    {
+      "qid": "Q1327919",
+      "name": "Colección Wallace",
+      "city": "Ciudad de Westminster",
+      "country": "Reino Unido",
+      "lat": 51.517454,
+      "lng": -0.153022,
+      "notableWorks": 17
+    },
+    {
+      "qid": "Q194626",
+      "name": "Museo de Arte de Basilea",
+      "city": "Basilea",
+      "country": "Suiza",
+      "lat": 47.554032,
+      "lng": 7.594193,
+      "notableWorks": 17
+    },
+    {
+      "qid": "Q163804",
+      "name": "Museo Städel",
+      "city": "Fráncfort del Meno",
+      "country": "Alemania",
+      "lat": 50.10322,
+      "lng": 8.67388,
+      "notableWorks": 16
+    },
+    {
+      "qid": "Q82941",
+      "name": "Museo de Arte de São Paulo",
+      "city": "São Paulo",
+      "country": "Brasil",
+      "lat": -23.561111111,
+      "lng": -46.655833333,
+      "notableWorks": 16
+    },
+    {
+      "qid": "Q170152",
+      "name": "Neue Pinakothek",
+      "city": "Múnich",
+      "country": "Alemania",
+      "lat": 48.149887,
+      "lng": 11.571114,
+      "notableWorks": 13
+    },
+    {
+      "qid": "Q3783572",
+      "name": "Harvard Art Museums",
+      "city": "Cambridge",
+      "country": "Estados Unidos",
+      "lat": 42.37416667,
+      "lng": -71.11472222,
+      "notableWorks": 12,
+      "api": "harvard"
+    },
+    {
+      "qid": "Q1464509",
+      "name": "Galería Nacional de Victoria",
+      "city": "Ciudad de Melbourne",
+      "country": "Australia",
+      "lat": -37.8225,
+      "lng": 144.968888888,
+      "notableWorks": 11
+    },
+    {
+      "qid": "Q12110695",
+      "name": "Courtauld Gallery",
+      "city": "Ciudad de Westminster",
+      "country": "Reino Unido",
+      "lat": 51.511568,
+      "lng": -0.117712,
+      "notableWorks": 11
+    },
+    {
+      "qid": "Q193375",
+      "name": "Tate Modern",
+      "city": "municipio de Southwark",
+      "country": "Reino Unido",
+      "lat": 51.507777777,
+      "lng": -0.099444444,
+      "notableWorks": 9
+    },
+    {
+      "qid": "Q460889",
+      "name": "Museo Nacional Centro de Arte Reina Sofía",
+      "city": "Madrid",
+      "country": "España",
+      "lat": 40.40857143,
+      "lng": -3.6939961,
+      "notableWorks": 9
+    },
+    {
+      "qid": "Q201469",
+      "name": "Museo Solomon R. Guggenheim",
+      "city": "Manhattan",
+      "country": "Estados Unidos",
+      "lat": 40.783055555,
+      "lng": -73.958888888,
+      "notableWorks": 9
+    },
+    {
+      "qid": "Q1068063",
+      "name": "Galería Nacional de Canadá",
+      "city": "Ottawa",
+      "country": "Canadá",
+      "lat": 45.429535,
+      "lng": -75.698906,
+      "notableWorks": 8
+    },
+    {
+      "qid": "Q639791",
+      "name": "Museo Whitney de Arte Estadounidense",
+      "city": "Manhattan",
+      "country": "Estados Unidos",
+      "lat": 40.7396,
+      "lng": -74.0089,
+      "notableWorks": 5
+    },
+    {
+      "qid": "Q1362629",
+      "name": "Museo Nacional de Arte Occidental",
+      "city": "Ueno-kōen",
+      "country": "Japón",
+      "lat": 35.7153567,
+      "lng": 139.7758498,
+      "notableWorks": 5
+    },
+    {
+      "qid": "Q10855544",
+      "name": "Galería de la Academia de Florencia",
+      "city": "Florencia",
+      "country": "Italia",
+      "lat": 43.776944444,
+      "lng": 11.258888888,
+      "notableWorks": 4
+    },
+    {
+      "qid": "Q670250",
+      "name": "Galería de Arte de Ontario",
+      "city": "Toronto",
+      "country": "Canadá",
+      "lat": 43.653611111,
+      "lng": -79.392777777,
+      "notableWorks": 4
+    },
+    {
+      "qid": "Q2097646",
+      "name": "Museo Soumaya",
+      "city": "Ciudad de México",
+      "country": "México",
+      "lat": 19.44066,
+      "lng": -99.20462,
+      "notableWorks": 4
+    },
+    {
+      "qid": "Q743206",
+      "name": "Museo Picasso de París",
+      "city": "París",
+      "country": "Francia",
+      "lat": 48.859731,
+      "lng": 2.362439,
+      "notableWorks": 3
+    },
+    {
+      "qid": "Q271928",
+      "name": "Palazzo Vecchio",
+      "city": "Florencia",
+      "country": "Italia",
+      "lat": 43.769444444,
+      "lng": 11.256111111,
+      "notableWorks": 2
+    },
+    {
+      "qid": "Q1779837",
+      "name": "Museo Nacional de Bellas Artes de Cuba",
+      "city": "La Habana",
+      "country": "Cuba",
+      "lat": 23.1314788,
+      "lng": -82.354984,
+      "notableWorks": 1
+    },
+    {
+      "qid": "Q160236",
+      "name": "Museo Metropolitano de Arte",
+      "city": "Manhattan",
+      "country": "Estados Unidos",
+      "lat": 40.779444444,
+      "lng": -73.963333333,
+      "notableWorks": -1,
+      "api": "met"
+    },
+    {
+      "qid": "Q214867",
+      "name": "Galería Nacional de Arte",
+      "city": "Washington D. C.",
+      "country": "Estados Unidos",
+      "lat": 38.891388888,
+      "lng": -77.02,
+      "notableWorks": -1
+    },
+    {
+      "qid": "Q132783",
+      "name": "Museo del Hermitage",
+      "city": "San Petersburgo",
+      "country": "Rusia",
+      "lat": 59.940555555,
+      "lng": 30.313611111,
+      "notableWorks": -1
+    },
+    {
+      "qid": "Q842858",
+      "name": "Museo Nacional de Estocolmo",
+      "city": "Estocolmo",
+      "country": "Suecia",
+      "lat": 59.328611111,
+      "lng": 18.078055555,
+      "notableWorks": -1
+    }
+  ]
+}

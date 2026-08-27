@@ -1,0 +1,158 @@
+/* Artlas — hoja de estilo única. La app es pequeña y visual; un sistema de
+   tokens en CSS puro evita arrastrar una dependencia de estilos entera. */
+
+:root {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --border: #e5e1da;
+  --text: #1a1815;
+  --muted: #6b6459;
+  --accent: #8c2f1f;
+  --accent-soft: #f4e8e5;
+  --shadow: 0 1px 3px rgb(26 24 21 / 0.08), 0 8px 24px rgb(26 24 21 / 0.04);
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513;
+    --surface: #201e1b;
+    --border: #34302a;
+    --text: #f0ece5;
+    --muted: #a39a8c;
+    --accent: #e07a5f;
+    --accent-soft: #2d211d;
+    --shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { line-height: 1.2; margin: 0 0 0.4em; font-weight: 650; letter-spacing: -0.02em; }
+
+/* --- Estructura ----------------------------------------------------------- */
+
+.shell { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 18px;
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.03em; white-space: nowrap; }
+.brand span { color: var(--accent); }
+
+.grow { flex: 1; }
+
+/* --- Formularios ---------------------------------------------------------- */
+
+.search-form { display: flex; gap: 8px; flex: 1; max-width: 620px; }
+
+input[type='search'], input[type='text'], input[type='number'], select {
+  width: 100%; padding: 9px 13px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 0.95rem;
+}
+
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.btn {
+  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 0.95rem; font-weight: 550;
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.08); }
+
+/* --- Rejilla de obras ----------------------------------------------------- */
+
+.grid {
+  display: grid; gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  padding: 24px 0;
+}
+
+.card { display: block; }
+.card:hover { text-decoration: none; }
+
+.card-image {
+  width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform 0.18s ease;
+}
+.card:hover .card-image { transform: translateY(-3px); }
+
+.card-title { margin: 10px 0 2px; font-size: 0.95rem; font-weight: 600; }
+.card-meta { margin: 0; font-size: 0.85rem; color: var(--muted); }
+
+/* --- Mapa ----------------------------------------------------------------- */
+
+.map { width: 100%; height: min(72vh, 640px); border-radius: var(--radius);
+       border: 1px solid var(--border); overflow: hidden; }
+
+.pin {
+  display: grid; place-items: center;
+  background: var(--accent); color: #fff;
+  border: 2px solid var(--surface); border-radius: 999px;
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+.maplibregl-popup-content {
+  background: var(--surface); color: var(--text);
+  border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow);
+  font-family: inherit;
+}
+.maplibregl-popup-tip { border-top-color: var(--surface) !important; }
+
+/* --- Ficha de obra -------------------------------------------------------- */
+
+.detail { display: grid; gap: 40px; padding: 32px 0; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .detail { grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); } }
+
+.detail-image {
+  width: 100%; height: auto; border-radius: var(--radius);
+  border: 1px solid var(--border); box-shadow: var(--shadow); background: var(--surface);
+}
+
+.facts { list-style: none; margin: 22px 0 0; padding: 0; }
+.facts li { display: flex; gap: 14px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 0.93rem; }
+.facts dt, .facts .k { min-width: 108px; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.chip {
+  display: inline-block; padding: 4px 11px;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 999px; font-size: 0.83rem; font-weight: 550;
+}
+
+/* --- Varios --------------------------------------------------------------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.87rem; }
+.empty { padding: 60px 0; text-align: center; color: var(--muted); }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 18px 0; }
+.filters label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+.filters > div { min-width: 130px; }
+
+footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0; }

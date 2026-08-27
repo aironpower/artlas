@@ -1,0 +1,19 @@
+{
+  "name": "artlas",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mapa mundial de obras de arte: catálogo, geolocalización y valoraciones",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "ingest": "npm run -w @artlas/ingest start --"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

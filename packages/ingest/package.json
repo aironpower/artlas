@@ -1,0 +1,27 @@
+{
+  "name": "@artlas/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "artlas-ingest": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "tsx --env-file=../../.env src/cli.ts",
+    "seed": "tsx src/build-seed.ts",
+    "verify": "tsx src/verify-sources.ts",
+    "estimate": "tsx src/estimate.ts",
+    "check-db": "tsx --env-file=../../.env src/check-db.ts",
+    "typecheck": "tsc --noEmit",
+    "peek": "tsx --env-file=../../.env src/peek.ts",
+    "refresh": "tsx --env-file=../../.env src/refresh-counters.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.7.0"
+  }
+}
