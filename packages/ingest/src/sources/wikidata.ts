@@ -45,8 +45,19 @@ import {
   type CanonicalMovement, type Lang, type Localized, type MuseumSeed,
 } from '../types.js';
 
-/** Filtro SPARQL con los idiomas del catálogo: "es","en","fr",... */
-const LANG_FILTER = LANGUAGES.map((l) => `"${l}"`).join(',');
+/**
+ * Filtro SPARQL con los idiomas del catálogo… y `mul`.
+ *
+ * `mul` es el idioma "multilingüe" que Wikidata estrenó para los nombres que
+ * se escriben igual en todas las lenguas. Al adoptarlo, a muchas entidades les
+ * BORRARON las etiquetas por idioma por redundantes, y eso nos dejaba sin
+ * nombre: Pablo Picasso (Q5593) tiene 102 etiquetas, ninguna en es, en ni fr,
+ * y la buena vive en `mul`. Como el código descartaba al artista sin nombre,
+ * Guernica y otras 9.335 obras publicadas se quedaron sin autor.
+ *
+ * Van Gogh y Monet conservan las suyas, y por eso el fallo parecía aleatorio.
+ */
+const LANG_FILTER = [...LANGUAGES, 'mul'].map((l) => `"${l}"`).join(',');
 
 /**
  * Wikidata no puede devolver una columna por idioma sin multiplicar filas, así
@@ -194,7 +205,7 @@ export async function fetchInstitution(museumQid: string): Promise<CanonicalInst
       ${localizedBlock('?city', 'cityName')}
       ${localizedBlock('?country', 'ctryName')}
       ${localizedBlock('?m', 'desc', 'schema:description')}
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "en,es". }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "mul,en,es". }
     }
     GROUP BY ?mLabel ?coord ?cityLabel ?countryLabel ?iso ?website ?image ?visitors
     LIMIT 1`;
@@ -385,7 +396,7 @@ async function hydrateScalars(qids: string[]): Promise<Row[]> {
       # etiqueta inglesa de Wikidata.
       OPTIONAL { ?work wdt:P217 ?inventory }
 
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "en,es". }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "mul,en,es". }
     }
     GROUP BY ?work ?workLabel ?class ?sitelinks ?image
              ?creator ?creatorLabel ?birth ?death ?nationalityLabel
@@ -431,17 +442,45 @@ async function fetchTexts(entityQids: string[]): Promise<Map<string, EntityText>
     }`,
     `textos ${entityQids.length}`);
 
+  /*
+   * `mul` no es un idioma del catálogo: es el respaldo de todos. Se recoge
+   * aparte y se reparte al final, solo donde falte la etiqueta propia, para
+   * que "Pablo Picasso" llegue a es, en y fr sin pisar una traducción de
+   * verdad allí donde exista ("La Gioconda" no debe volverse "Mona Lisa").
+   */
+  const multi = new Map<string, { label?: string; description?: string }>();
+
   for (const row of rows) {
     const entity = qid(val(row, 'e'));
     // El idioma viaja en el propio literal, no en una columna aparte.
-    const lang = row['text']?.['xml:lang'] as Lang | undefined;
+    const lang = row['text']?.['xml:lang'] as string | undefined;
     const text = val(row, 'text');
     if (!entity || !lang || !text) continue;
 
-    const entry = result.get(entity) ?? { labels: {}, descriptions: {} };
-    const target = val(row, 'kind') === 'd' ? entry.descriptions : entry.labels;
+    const esDescripcion = val(row, 'kind') === 'd';
 
-    if (!target[lang]) target[lang] = text;
+    if (lang === 'mul') {
+      const entry = multi.get(entity) ?? {};
+      if (esDescripcion) entry.description ??= text; else entry.label ??= text;
+      multi.set(entity, entry);
+      continue;
+    }
+
+    const entry = result.get(entity) ?? { labels: {}, descriptions: {} };
+    const target = esDescripcion ? entry.descriptions : entry.labels;
+
+    if (!target[lang as Lang]) target[lang as Lang] = text;
+    result.set(entity, entry);
+  }
+
+  for (const [entity, respaldo] of multi) {
+    const entry = result.get(entity) ?? { labels: {}, descriptions: {} };
+    for (const lang of LANGUAGES) {
+      if (respaldo.label && !entry.labels[lang]) entry.labels[lang] = respaldo.label;
+      if (respaldo.description && !entry.descriptions[lang]) {
+        entry.descriptions[lang] = respaldo.description;
+      }
+    }
     result.set(entity, entry);
   }
 
@@ -517,6 +556,28 @@ export async function* fetchArtworks(
   }
 }
 
+/**
+ * El nombre utilizable de un autor, o undefined si de verdad no hay ninguno.
+ *
+ * Descarta el caso en que la etiqueta es el propio QID —así responde el
+ * servicio de Wikidata cuando no encuentra nombre— y el `genid` de las
+ * autorías anónimas, que llega como URL y ya tenía su regla en la puerta.
+ */
+function nombreDeAutor(
+  etiqueta: string | undefined,
+  creatorQid: string | undefined,
+  textos: EntityText,
+): string | undefined {
+  if (etiqueta && etiqueta !== creatorQid && !etiqueta.startsWith('http')) return etiqueta;
+
+  for (const lang of LANGUAGES) {
+    const alternativa = textos.labels[lang];
+    if (alternativa && !alternativa.startsWith('http')) return alternativa;
+  }
+
+  return undefined;
+}
+
 function toCanonical(
   row: Row,
   workQid: string,
@@ -554,10 +615,20 @@ function toCanonical(
     mediums: textsOf(qid(val(row, 'material'))).labels,
     genres: textsOf(qid(val(row, 'genre'))).labels,
 
-    artist: creatorName && creatorName !== creatorQid
+    /*
+     * El nombre del autor tiene dos fuentes y hay que probar las dos. El
+     * servicio de etiquetas de la consulta grande devuelve el QID cuando no
+     * encuentra etiqueta, y entonces `creatorName` vale "Q5593"; la consulta
+     * plana de textos, que ahora entiende `mul`, sí trae "Pablo Picasso".
+     *
+     * Fiarse solo de la primera es lo que dejó sin autor a 9.336 obras
+     * publicadas, Guernica entre ellas. Sin nombre en ninguna de las dos, sí
+     * es autoría anónima y la obra entra sin artista, que es lo correcto.
+     */
+    artist: nombreDeAutor(creatorName, creatorQid, creatorTexts)
       ? {
           wikidataQid: creatorQid,
-          name: creatorName,
+          name: nombreDeAutor(creatorName, creatorQid, creatorTexts)!,
           names: creatorTexts.labels,
           descriptions: creatorTexts.descriptions,
           birthYear: yearOf(val(row, 'birth')),

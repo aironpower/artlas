@@ -277,3 +277,24 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
    * autor ya identifican la obra, y en la ficha del museo es redundante. */
   .card-meta.small { display: none; }
 }
+
+/* --- La cabecera en el móvil ------------------------------------------------
+ *
+ * En un teléfono de 390 px la barra tiene que repartir: logo, buscador, botón
+ * y tres idiomas. Al buscador le quedaban 40 px —una cajita vacía en la que no
+ * cabe una letra— porque `input { width: 100% }` dentro de un flex encoge por
+ * debajo de su contenido sin quejarse.
+ *
+ * El botón «Buscar» se va: el teclado del móvil trae su propia tecla de buscar
+ * y el formulario ya se envía con ella. Quitarlo devuelve unos 75 px al campo,
+ * que es lo único que ahí necesita espacio.
+ *
+ * Y los campos pasan a 16 px: por debajo de eso, Safari en iPhone hace zoom
+ * automático al tocarlos y deja la página descuadrada.
+ */
+@media (max-width: 560px) {
+  .topbar { gap: 10px; padding: 10px 14px; }
+  .search-form { min-width: 0; }
+  .search-form .btn { display: none; }
+  input[type='search'], input[type='text'], input[type='number'], select { font-size: 16px; }
+}

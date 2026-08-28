@@ -136,6 +136,43 @@ es de pago.
 
 ---
 
+## PENDIENTE AL RETOMAR: recuperar 9.336 autores perdidos
+
+El código ya no pierde autores, pero **las obras que ya están dentro siguen sin
+el suyo**: 9.336 publicadas, el 15%, Guernica entre ellas. Hace falta una pasada
+que las repare, y todavía no está escrita. Lo que tendría que hacer: para cada
+obra publicada sin `artist_id`, pedir su `P170` a Wikidata, resolver el nombre
+—ya con `mul`— y crear o enlazar el artista. Son unos 19 lotes de 500.
+
+### Por qué se perdieron: el idioma `mul` de Wikidata
+
+Wikidata estrenó el código de idioma **`mul`** ("multilingüe") para los nombres
+que se escriben igual en todas las lenguas, y al adoptarlo BORRÓ de muchas
+entidades sus etiquetas por idioma, por redundantes. Medido:
+
+```
+  Pablo Picasso (Q5593)      102 etiquetas · mul="Pablo Picasso" · en=— · es=—
+  Vincent van Gogh (Q5582)   240 etiquetas · mul y en y es, las tres
+  Claude Monet (Q296)        149 etiquetas · mul y en y es, las tres
+```
+
+Nuestras consultas pedían `es,en,fr`, así que Picasso volvía **sin nombre**: el
+servicio de etiquetas devolvía el propio QID ("Q5593") y la consulta plana de
+textos, cero filas. Y el código descartaba al artista cuando el nombre era igual
+al QID. Por eso el fallo parecía aleatorio: dependía de si a esa entidad le
+habían quitado las etiquetas sueltas o no.
+
+Arreglado en `wikidata.ts` (28 de agosto): `mul` entra en el filtro de idiomas y
+en el servicio de etiquetas, se guarda como RESPALDO de los idiomas del catálogo
+—solo donde falte el propio, para no convertir "La Gioconda" en "Mona Lisa"— y
+el nombre del autor se busca en las dos fuentes antes de darlo por anónimo.
+
+**Ojo al re-ingerir**: esto afecta a todo lo que lleve etiqueta, no solo a los
+autores. Títulos, materiales, géneros y movimientos que hoy estén vacíos pueden
+llenarse solos en la próxima pasada.
+
+---
+
 ## Lo hecho en la web el 28 de agosto (tarde)
 
 **Paginación en museo, artista y buscador.** El catálogo estaba invisible
@@ -154,8 +191,12 @@ Lo que queda de aquel repaso visual, por orden de lo que más chirría:
    alto, Guernica ocupa 588 y el pie flota a media página.
 2. **La tarjeta es enorme en móvil**: 580 px cada una, una sola columna. Las
    páginas siguen midiendo 21.000 px por eso, no por el número de obras.
-3. **La cabecera repite el buscador grande** en todas las páginas, incluso
-   dentro de una obra.
+3. ~~La cabecera repite el buscador grande~~ — arreglado lo urgente el 28 de
+   agosto: en el móvil el campo se quedaba en 40 px, una cajita donde no cabía
+   una letra. Se quita el botón «Buscar» (el teclado del móvil ya trae el suyo)
+   y los campos pasan a 16 px para que Safari no haga zoom al tocarlos. Queda
+   pendiente lo estético: que no aparezca a pantalla completa dentro de una
+   obra.
 4. **Los títulos arrastran ruido de Wikidata**: «El columpio (Goya)», con el
    pintor repetido justo debajo.
 5. **Las transiciones entre vistas**, que era lo que Manuel pedía junto al
