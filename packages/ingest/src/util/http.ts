@@ -42,10 +42,28 @@ export class HttpError extends Error {
 }
 
 /**
+ * ¿Merece la pena reintentar esta respuesta?
+ *
+ * Solo 429 —"vas muy rápido", que se arregla esperando— y 5xx —"me he caído",
+ * que se arregla solo—. Cualquier otro 4xx es una respuesta firme del servidor
+ * y reintentarla es gastar cuota para que te digan lo mismo.
+ *
+ * Esto lo enseñó el Met: tras horas de peticiones nos devolvió 403 con una
+ * página de bloqueo antibots, y la ingesta lo trató como un fallo pasajero.
+ * Cada obra costaba dos reintentos y nueve segundos para acabar igual, así que
+ * el barrido se quedó veinte minutos sin escribir una sola fila mientras
+ * parecía que trabajaba. Un muro no se cae en cuatro segundos.
+ */
+function esReintentable(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/**
  * GET con reintentos y backoff exponencial.
  *
- * Reintenta 429, 5xx y errores de red. Un 404 no se reintenta: la obra
- * simplemente no existe y reintentar solo gasta cuota.
+ * Reintenta 429, 5xx y errores de red. Los demás fallos del servidor se lanzan
+ * a la primera: un 404 es que la obra no existe y un 403 es que no nos dejan
+ * pasar; ninguno de los dos cambia por insistir.
  */
 export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   const { headers = {}, timeoutMs = 90_000, retries = 4, label = 'http' } = opts;
@@ -68,12 +86,8 @@ export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promis
         signal: controller.signal,
       });
 
-      if (res.status === 404) {
-        throw new HttpError(404, url, `no encontrado`);
-      }
-
-      // 429/5xx son transitorios: dejamos que el bucle reintente.
-      if (res.status === 429 || res.status >= 500) {
+      // Transitorios: dejamos que el bucle reintente con su backoff.
+      if (esReintentable(res.status)) {
         lastError = new HttpError(res.status, url, `${res.status} ${res.statusText}`);
         continue;
       }
@@ -84,7 +98,9 @@ export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promis
 
       return (await res.json()) as T;
     } catch (err) {
-      if (err instanceof HttpError && err.status === 404) throw err;
+      // Un fallo firme del servidor sale ya; solo los transitorios y los
+      // errores de red (que no son HttpError) vuelven a intentarse.
+      if (err instanceof HttpError && !esReintentable(err.status)) throw err;
       lastError = err;
     } finally {
       clearTimeout(timer);

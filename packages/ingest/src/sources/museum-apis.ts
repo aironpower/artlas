@@ -84,7 +84,12 @@ export async function enrichFromMet(work: CanonicalArtwork): Promise<Enrichment 
       { label: `met:buscar ${work.title.slice(0, 30)}`, retries: 2 },
     );
     ids = (search.objectIDs ?? []).slice(0, 5);
-  } catch {
+    anotaExito('met');
+  } catch (err) {
+    // Se sigue devolviendo null —enriquecer es opcional— pero antes se apunta,
+    // porque aquí es donde llega el 403 del muro y tragárselo dejaba al
+    // cortacircuitos sin nada que contar.
+    anotaPuerta('met', err);
     return null;
   }
 
@@ -99,8 +104,11 @@ export async function enrichFromMet(work: CanonicalArtwork): Promise<Enrichment 
       });
     } catch (err) {
       if (err instanceof HttpError && err.status === 404) continue;
+      anotaPuerta('met', err);
       return null;
     }
+
+    anotaExito('met');
 
     const objQid = obj.objectWikidata_URL?.split('/').pop();
     if (objQid !== work.wikidataQid) continue;
@@ -178,7 +186,9 @@ export async function enrichFromAic(work: CanonicalArtwork): Promise<Enrichment 
       { label: `aic:buscar ${work.title.slice(0, 30)}`, retries: 2 },
     );
     candidates = res.data ?? [];
-  } catch {
+    anotaExito('aic');
+  } catch (err) {
+    anotaPuerta('aic', err);
     return null;
   }
 
@@ -308,6 +318,53 @@ export function needsEnrichment(work: CanonicalArtwork): boolean {
 }
 
 /**
+ * Cuando un museo nos cierra la puerta.
+ *
+ * El 28 de agosto de 2026 el Met devolvió 403 con una página de bloqueo
+ * antibots tras horas de peticiones. Aun sin reintentar, seguir preguntando
+ * son dos viajes HTTP por obra para que te digan que no: el barrido se pasó
+ * veinte minutos sin escribir una fila.
+ *
+ * Así que a la quinta puerta en las narices se deja de preguntar a ESA API
+ * durante el resto de la ejecución. No se aborta la ingesta: enriquecer es
+ * opcional y las obras se guardan igual con lo de Wikidata. Al relanzar se
+ * vuelve a intentar, que es cuando el bloqueo suele haber caducado.
+ *
+ * Cuentan SEGUIDAS, y cualquier respuesta buena pone el contador a cero. Se
+ * midió y hacía falta: el muro del Met es intermitente —deja pasar unas y
+ * bloquea otras—, así que contar 403 sueltos habría hecho renunciar a una API
+ * que en realidad funcionaba. Cinco seguidas sin un solo acierto en medio ya
+ * no es mala suerte.
+ */
+const PUERTAS_ANTES_DE_RENDIRSE = 5;
+const cerrazon = new Map<string, number>();
+const rendidos = new Set<string>();
+
+function anotaPuerta(api: string, err: unknown): void {
+  if (!(err instanceof HttpError) || (err.status !== 403 && err.status !== 401)) return;
+
+  const van = (cerrazon.get(api) ?? 0) + 1;
+  cerrazon.set(api, van);
+
+  if (van >= PUERTAS_ANTES_DE_RENDIRSE && !rendidos.has(api)) {
+    rendidos.add(api);
+    console.warn(
+      `  ⚠ ${api}: nos ha bloqueado (${err.status}). Se sigue SIN enriquecer ` +
+      `desde esa API; las obras se guardan igual. Al relanzar se reintenta.`);
+  }
+}
+
+/** Una respuesta buena: el muro no está, o ha dejado de estar. */
+function anotaExito(api: string): void {
+  cerrazon.set(api, 0);
+}
+
+/** ¿Nos hemos rendido ya con esta API en esta ejecución? */
+export function apiBloqueada(api: string): boolean {
+  return rendidos.has(api);
+}
+
+/**
  * Enriquece un lote entero, con varias peticiones a la vez.
  *
  * En serie el ritmo medido fue de 7,3 obras/min contra las 172 obras/min de la
@@ -324,10 +381,14 @@ export async function enrichBatch(
   api: 'met' | 'aic' | 'harvard',
   concurrency = 6,
 ): Promise<number> {
+  if (apiBloqueada(api)) return 0;
+
   const pendientes = works.filter(needsEnrichment);
   let enriquecidas = 0;
 
   for (let i = 0; i < pendientes.length; i += concurrency) {
+    if (apiBloqueada(api)) break;
+
     await Promise.all(pendientes.slice(i, i + concurrency).map(async (work) => {
       try {
         const extra = await enrich(work, api);
@@ -337,8 +398,9 @@ export async function enrichBatch(
         // referencia a este mismo objeto y perdería los cambios si se sustituye.
         Object.assign(work, applyEnrichment(work, extra));
         enriquecidas++;
-      } catch {
+      } catch (err) {
         /* enriquecer es opcional; la obra ya tiene lo de Wikidata */
+        anotaPuerta(api, err);
       }
     }));
   }
