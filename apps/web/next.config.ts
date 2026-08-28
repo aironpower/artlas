@@ -31,6 +31,19 @@ try {
  */
 const config: NextConfig = {
   /*
+   * Dónde deja Next lo compilado. Normalmente `.next`, pero se puede mover con
+   * una variable de entorno, y eso resuelve un tropiezo real: con un
+   * `next start` sirviendo `.next` en un puerto, compilar o levantar el modo
+   * desarrollo BORRA lo que ese servidor está leyendo. Pasó una vez y llevó a
+   * concluir en voz alta que las URLs traducidas rompían la portada.
+   *
+   *   NEXT_DIST_DIR=.next-dev npx next dev -p 3112
+   *
+   * En Vercel no está definida, así que allí sigue siendo `.next`.
+   */
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+
+  /*
    * URLs traducidas. Las carpetas de `app/[lang]/` se llaman en español —el
    * idioma por defecto— y estas reescrituras hacen que `/en/artwork/1973` sirva
    * la carpeta `obra` sin que el usuario vea una palabra en español en la barra

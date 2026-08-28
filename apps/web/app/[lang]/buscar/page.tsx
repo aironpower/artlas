@@ -1,25 +1,33 @@
 import { notFound } from 'next/navigation';
 import { isLang, t, formatNumber, type Lang } from '@/lib/i18n';
 import { searchArtworks, listMovements, listCountries } from '@/lib/data';
+import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
+import Paginacion, { leerPagina } from '@/components/Paginacion';
 
 export const revalidate = 3600;
 
 interface Params { params: Promise<{ lang: string }>; searchParams: Promise<Record<string, string | undefined>> }
 
 /*
- * Tope de resultados. Se declara aquí y no se deja al valor por defecto de
- * `searchArtworks` porque la cabecera necesita saberlo: si vienen justo LIMIT
- * resultados, el total real es ese o más, y anunciar "60 obras" a secas era
- * decir que el catálogo tiene 60 cuadros de Rembrandt cuando tiene 119.
+ * Obras por página. Antes esto era un TOPE de 60 y la cabecera decía "60+"
+ * para no mentir: el catálogo tenía 119 Rembrandt y la web enseñaba 60 sin
+ * manera de ver el resto. Con `p_offset` (0023) ya no es un techo.
+ *
+ * Lo que sigue sin saberse es el total: contar las coincidencias de una
+ * búsqueda con comodines en cada página se paga en los 3 s de `statement_
+ * timeout` del rol `anon`. Por eso se pide una obra de más —si vuelve, hay
+ * página siguiente— en vez de contar.
  */
-const LIMIT = 60;
+const POR_PAGINA = 36;
 
 export default async function SearchPage({ params, searchParams }: Params) {
   const { lang } = await params;
   if (!isLang(lang)) notFound();
 
   const sp = await searchParams;
+  const pagina = leerPagina(sp.p);
+
   const filters = {
     query: sp.q,
     movement: sp.mov,
@@ -28,21 +36,33 @@ export default async function SearchPage({ params, searchParams }: Params) {
     category: sp.cat,
     yearFrom: sp.desde ? Number(sp.desde) : undefined,
     yearTo: sp.hasta ? Number(sp.hasta) : undefined,
-    limit: LIMIT,
+    limit: POR_PAGINA + 1,
+    offset: (pagina - 1) * POR_PAGINA,
   };
 
-  const [results, movements, countries] = await Promise.all([
+  const [lote, movements, countries] = await Promise.all([
     searchArtworks(lang, filters),
     listMovements(lang),
     listCountries(lang),
   ]);
+
+  const results = lote.slice(0, POR_PAGINA);
+  const hayMas = lote.length > POR_PAGINA;
+
+  /*
+   * Una página más allá del final no es una página vacía: no existe. Se mira
+   * lo que ha vuelto y no el contador, que se recalcula al terminar cada
+   * ingesta y puede ir un rato por detrás de las filas.
+   */
+  if (pagina > 1 && lote.length === 0) notFound();
+
 
   return (
     <>
       <h1 style={{ paddingTop: 26 }}>
         {sp.q ? `“${sp.q}”` : t(lang, 'explore')}
         <span className="muted" style={{ fontSize: '1rem', fontWeight: 400, marginLeft: 10 }}>
-          {formatNumber(lang, results.length)}{results.length === LIMIT && '+'}{' '}
+          {formatNumber(lang, results.length)}{hayMas && '+'}{' '}
           {t(lang, 'artworks')}
         </span>
       </h1>
@@ -91,6 +111,14 @@ export default async function SearchPage({ params, searchParams }: Params) {
       </form>
 
       <ArtworkGrid lang={lang} items={results} />
+      <Paginacion
+        lang={lang}
+        page={pagina}
+        hasNext={hayMas}
+        basePath={path(lang, 'search')}
+        params={sp}
+        pageSize={POR_PAGINA}
+      />
     </>
   );
 }

@@ -67,6 +67,10 @@ const UI = {
     distance: 'a',
     backToMap: 'Volver al mapa',
     sourceNote: 'Datos de Wikidata y de las colecciones de los museos',
+    previous: 'Anterior',
+    next: 'Siguiente',
+    page: 'Página',
+    ofTotal: 'de',
   },
   en: {
     tagline: "Find the world's artworks, wherever you are",
@@ -106,6 +110,10 @@ const UI = {
     distance: 'away',
     backToMap: 'Back to map',
     sourceNote: 'Data from Wikidata and museum collections',
+    previous: 'Previous',
+    next: 'Next',
+    page: 'Page',
+    ofTotal: 'of',
   },
   fr: {
     tagline: 'Trouvez les œuvres du monde entier, où que vous soyez',
@@ -145,6 +153,10 @@ const UI = {
     distance: 'de distance',
     backToMap: 'Retour à la carte',
     sourceNote: 'Données de Wikidata et des collections des musées',
+    previous: 'Précédent',
+    next: 'Suivant',
+    page: 'Page',
+    ofTotal: 'sur',
   },
   it: {
     tagline: 'Trova le opere d’arte del mondo, ovunque tu sia',
@@ -181,6 +193,10 @@ const UI = {
     distance: 'di distanza',
     backToMap: 'Torna alla mappa',
     sourceNote: 'Dati da Wikidata e dalle collezioni dei musei',
+    previous: 'Precedente',
+    next: 'Successivo',
+    page: 'Pagina',
+    ofTotal: 'di',
   },
   de: {
     tagline: 'Finde die Kunstwerke der Welt, wo immer du bist',
@@ -217,6 +233,10 @@ const UI = {
     distance: 'entfernt',
     backToMap: 'Zurück zur Karte',
     sourceNote: 'Daten aus Wikidata und Museumssammlungen',
+    previous: 'Zurück',
+    next: 'Weiter',
+    page: 'Seite',
+    ofTotal: 'von',
   },
   pt: {
     tagline: 'Encontra as obras de arte do mundo, onde quer que estejas',
@@ -253,6 +273,10 @@ const UI = {
     distance: 'de distância',
     backToMap: 'Voltar ao mapa',
     sourceNote: 'Dados da Wikidata e das coleções dos museus',
+    previous: 'Anterior',
+    next: 'Seguinte',
+    page: 'Página',
+    ofTotal: 'de',
   },
   nl: {
     tagline: 'Vind de kunstwerken van de wereld, waar je ook bent',
@@ -289,6 +313,10 @@ const UI = {
     distance: 'verderop',
     backToMap: 'Terug naar de kaart',
     sourceNote: 'Gegevens van Wikidata en museumcollecties',
+    previous: 'Vorige',
+    next: 'Volgende',
+    page: 'Pagina',
+    ofTotal: 'van',
   },
 } as const;
 

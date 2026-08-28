@@ -10,3 +10,4 @@ out/
 supabase/.temp/
 ingesta.log
 apps/web/tsconfig.tsbuildinfo
+apps/web/.next-dev/

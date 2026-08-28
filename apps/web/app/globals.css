@@ -228,3 +228,24 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .filters > div { min-width: 130px; }
 
 footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0; }
+
+/* --- Paginación ------------------------------------------------------------
+ *
+ * Tres columnas fijas y no un `flex` con `gap`: así el número de página queda
+ * centrado en la pantalla aunque falte "Anterior" (página 1) o "Siguiente"
+ * (última). Con flex, cada página lo colocaba en un sitio distinto y el ojo
+ * lo notaba al pasar de una a otra.
+ */
+.pagination {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 16px; padding: 8px 0 40px;
+}
+.pagination-link {
+  justify-self: start;
+  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  font-size: 0.95rem; font-weight: 550; white-space: nowrap;
+}
+.pagination-link[rel='next'] { justify-self: end; }
+.pagination-link:hover { border-color: var(--accent); text-decoration: none; }
+.pagination-status { justify-self: center; text-align: center; }

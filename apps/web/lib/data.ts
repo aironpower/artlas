@@ -147,6 +147,19 @@ export interface Artist {
   artwork_count: number;
 }
 
+export interface MuseumWork extends Rights {
+  id: number;
+  title: string;
+  slug: string;
+  image_url: string | null;
+  year_start: number | null;
+  date_display: string | null;
+  category: string;
+  artist_name: string | null;
+  artist_slug: string | null;
+  notability: number;
+}
+
 export interface SearchFilters {
   query?: string;
   movement?: string;
@@ -156,6 +169,7 @@ export interface SearchFilters {
   yearTo?: number;
   category?: string;
   limit?: number;
+  offset?: number;
 }
 
 // --- Consultas --------------------------------------------------------------
@@ -184,6 +198,7 @@ export async function searchArtworks(
     p_year_to: filters.yearTo ?? null,
     p_category: filters.category || null,
     max_results: filters.limit ?? 60,
+    p_offset: filters.offset ?? 0,
   });
 
   if (error) throw new Error(`búsqueda: ${error.message}`);
@@ -208,6 +223,33 @@ export async function artworksNear(
 
   if (error) throw new Error(`cercanas: ${error.message}`);
   return hideRestrictedImage((data ?? []) as NearbyArtwork[]);
+}
+
+/**
+ * Las obras de un museo, paginadas.
+ *
+ * Antes la ficha de museo pedía "las obras a menos de 50 metros de este punto"
+ * con `artworksNear`, para no repetir la cadena de idiomas. Aquello no se podía
+ * paginar —`artworks_near` ordena por distancia y no acepta desplazamiento— y
+ * además contaba por geografía mientras el contador del museo cuenta por
+ * `institution_id`: dos números distintos en la misma pantalla. La migración
+ * 0023 estrena una función que pregunta lo que la página quiere decir.
+ */
+export async function artworksByInstitution(
+  lang: Lang,
+  slug: string,
+  limit = 36,
+  offset = 0,
+): Promise<MuseumWork[]> {
+  const { data, error } = await db().rpc('artworks_by_institution', {
+    p_slug: slug,
+    p_lang: lang,
+    max_results: limit,
+    p_offset: offset,
+  });
+
+  if (error) throw new Error(`obras de ${slug}: ${error.message}`);
+  return hideRestrictedImage((data ?? []) as MuseumWork[]);
 }
 
 export async function mapPins(lang: Lang): Promise<MapPin[]> {
@@ -259,11 +301,13 @@ export async function artworksByArtist(
   lang: Lang,
   slug: string,
   limit = 500,
+  offset = 0,
 ): Promise<ArtistWork[]> {
   const { data, error } = await db().rpc('artworks_by_artist', {
     p_slug: slug,
     p_lang: lang,
     max_results: limit,
+    p_offset: offset,
   });
 
   if (error) throw new Error(`obras de ${slug}: ${error.message}`);
