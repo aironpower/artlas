@@ -121,11 +121,18 @@ caso de `migrate`). Es deliberado: casi todas mueven o borran filas.
 
 ## Publicación
 
-El código está en **https://github.com/aironpower/artlas** (privado) y el sitio
-se publica en **Vercel**, no en GitHub Pages. Los pasos y el porqué están en
-[DESPLIEGUE.md](DESPLIEGUE.md). Resumido: Pages no puede servir esta app —hacen
-falta servidor y 232.491 páginas contra su límite de 1 GB— y desde repo privado
-además es de pago.
+**El sitio está en https://artlas.softie.dev desde el 28 de agosto de 2026.**
+El código, en https://github.com/aironpower/artlas (privado). Cada push a
+`master` publica solo. El proyecto de Vercel se llama `web`, no `artlas`.
+
+Comprobado en producción el día que se subió: las tres portadas, buscador,
+museo, artista, obra, «cerca de mí» (60 obras desde el Paseo del Prado) y la
+entrada al panel con enlace mágico, que vuelve al dominio y no a localhost.
+
+Los pasos, y los tres atascos que costaron la tarde, en
+[DESPLIEGUE.md](DESPLIEGUE.md). No es GitHub Pages y no puede serlo: hacen falta
+servidor y 232.491 páginas contra su límite de 1 GB, y desde repo privado además
+es de pago.
 
 ---
 
