@@ -70,6 +70,41 @@ trabajando en local.
 
 ---
 
+## Lo que se atascó la primera vez (28 de agosto de 2026)
+
+Tres cosas, ninguna del código, y las tres volverán a pasar con el siguiente
+subdominio:
+
+**Vercel no veía el repositorio.** «Failed to link... You need to add a Login
+Connection». La cuenta de Vercel se creó con correo, no con GitHub, así que no
+podía leer un repo privado. Se arregla en Account Settings > Authentication,
+conectando GitHub y dándole acceso al repo.
+
+**El proyecto no se llamó `artlas`, se llamó `web`.** Al reimportar, Vercel lo
+bautizó con el nombre de la carpeta (`apps/web`). Como el dominio se había
+añadido al proyecto vacío del primer intento, `artlas.softie.dev` respondía
+`DEPLOYMENT_NOT_FOUND`: el dominio llegaba a Vercel, pero al proyecto que no
+tenía ningún despliegue. Esa cabecera —`x-vercel-error`— es la que dice si el
+problema es el DNS o el proyecto.
+
+**Verificación de propiedad por TXT.** Al mover el dominio al proyecto bueno,
+Vercel pidió demostrar que `softie.dev` es nuestro con un TXT en
+`_vercel.softie.dev`. El nombre se pone solo como `_vercel`, no entero, o acaba
+en `_vercel.softie.dev.softie.dev`.
+
+Y una que NO hizo falta: cambiar el CNAME. Vercel recomienda ahora unos
+registros nuevos, pero el `cname.vercel-dns.com` de siempre sigue valiendo.
+
+Comprobar el DNS desde fuera antes de pulsar «Refresh» ahorra el baile de
+recargar contra un registro que aún no ha propagado:
+
+```bash
+nslookup -type=TXT _vercel.softie.dev 8.8.8.8
+curl -sI http://artlas.softie.dev/ | grep -i x-vercel-error
+```
+
+---
+
 ## Comprobar que quedó bien
 
 1. La portada en los tres idiomas: `/es`, `/en`, `/fr`.
