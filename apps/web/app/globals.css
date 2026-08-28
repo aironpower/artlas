@@ -249,3 +249,31 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
 .pagination-link[rel='next'] { justify-self: end; }
 .pagination-link:hover { border-color: var(--accent); text-decoration: none; }
 .pagination-status { justify-self: center; text-align: center; }
+
+/* Cabecera de sección: el título a la izquierda y "ver todas" a la derecha, en
+ * la misma línea de base. El enlace es la salida del callejón, así que va
+ * arriba y visible, no escondido al final de la rejilla. */
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; padding-top: 26px;
+}
+.section-head h2 { margin: 0; }
+
+/* --- La rejilla en el móvil ------------------------------------------------
+ *
+ * `minmax(215px, 1fr)` daba UNA columna en un teléfono de 390 px: la imagen
+ * ocupaba 350 × 467 y cada tarjeta 580 px de alto, así que 36 obras eran 21.000
+ * píxeles de scroll. Dos columnas fijas parten eso por la mitad y, de paso, se
+ * parecen más a cómo se mira arte: varias piezas a la vez, comparándolas.
+ *
+ * Se fija `repeat(2, ...)` en vez de bajar el `minmax`, que habría dado ocho
+ * columnas apretadas en un escritorio ancho.
+ */
+@media (max-width: 560px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px 0; }
+  .card-title { font-size: 0.88rem; margin-top: 8px; }
+  .card-meta { font-size: 0.78rem; }
+  /* La tercera línea (el museo) sobra en una tarjeta de 165 px: el título y el
+   * autor ya identifican la obra, y en la ficha del museo es redundante. */
+  .card-meta.small { display: none; }
+}

@@ -1,13 +1,16 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { isLang, t, type Lang } from '@/lib/i18n';
-import { getArtwork, searchArtworks } from '@/lib/data';
+import { getArtwork, artworksByArtist, artworksByInstitution } from '@/lib/data';
 import { imageUrl } from '@/lib/images';
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import ArtworkImage from '@/components/ArtworkImage';
 
 export const revalidate = 3600;
+
+/** Cuántas obras se enseñan en cada sección de "sigue por aquí". */
+const RELACIONADAS = 12;
 
 interface Props { params: Promise<{ lang: string; id: string }> }
 
@@ -35,11 +38,30 @@ export default async function ArtworkPage({ params }: Props) {
   const work = await getArtwork(lang, numericId);
   if (!work) notFound();
 
-  // Más obras del mismo autor, para seguir tirando del hilo.
-  const alsoBy = work.artist
-    ? (await searchArtworks(lang, { artist: work.artist.slug, limit: 12 }))
-        .filter((w) => w.id !== work.id)
-    : [];
+  /*
+   * Por dónde seguir. Antes solo había "más obras del mismo autor", y eso
+   * dejaba sin salida al 15% del catálogo: 9.336 obras publicadas no tienen
+   * autor —Guernica, sin ir más lejos— y la sección sencillamente no se
+   * pintaba. La ficha terminaba en blanco y el visitante, en un callejón.
+   *
+   * El museo, en cambio, lo tienen TODAS: cero obras publicadas sin museo. Por
+   * eso va también, y en ese orden: el autor es lo más afín cuando existe, y el
+   * museo es la red que nunca falla.
+   *
+   * Se pide una obra de más porque una de las que vuelven es esta misma, y hay
+   * que quitarla sin dejar la fila coja.
+   */
+  const [alsoBy, alsoHere] = await Promise.all([
+    work.artist
+      ? artworksByArtist(lang, work.artist.slug, RELACIONADAS + 1)
+      : Promise.resolve([]),
+    work.institution
+      ? artworksByInstitution(lang, work.institution.slug, RELACIONADAS + 1)
+      : Promise.resolve([]),
+  ]);
+
+  const delAutor = alsoBy.filter((w) => w.id !== work.id).slice(0, RELACIONADAS);
+  const delMuseo = alsoHere.filter((w) => w.id !== work.id).slice(0, RELACIONADAS);
 
   return (
     <>
@@ -119,10 +141,27 @@ export default async function ArtworkPage({ params }: Props) {
         </div>
       </article>
 
-      {alsoBy.length > 0 && work.artist && (
+      {delAutor.length > 0 && work.artist && (
         <section>
-          <h2>{t(lang, 'allWorksBy')} {work.artist.name}</h2>
-          <ArtworkGrid lang={lang as Lang} items={alsoBy} />
+          <div className="section-head">
+            <h2>{t(lang, 'moreBy')} {work.artist.name}</h2>
+            <Link className="small" href={path(lang, 'artist', work.artist.slug)}>
+              {t(lang, 'seeAll')} →
+            </Link>
+          </div>
+          <ArtworkGrid lang={lang as Lang} items={delAutor} />
+        </section>
+      )}
+
+      {delMuseo.length > 0 && work.institution && (
+        <section>
+          <div className="section-head">
+            <h2>{t(lang, 'moreAtMuseum')}</h2>
+            <Link className="small" href={path(lang, 'museum', work.institution.slug)}>
+              {t(lang, 'seeAll')} →
+            </Link>
+          </div>
+          <ArtworkGrid lang={lang as Lang} items={delMuseo} />
         </section>
       )}
     </>
