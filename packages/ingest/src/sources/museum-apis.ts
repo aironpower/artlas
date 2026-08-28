@@ -191,11 +191,30 @@ export async function enrichFromAic(work: CanonicalArtwork): Promise<Enrichment 
     medium: match.medium_display,
     heightCm: dims?.heightCm,
     widthCm: dims?.widthCm,
-    // IIIF: pedimos 1686px de ancho, el máximo que sirve AIC por defecto.
-    imageUrl: match.image_id
-      ? `https://www.artic.edu/iiif/2/${match.image_id}/full/1686,/0/default.jpg`
-      : undefined,
-    iiifBase: match.image_id ? `https://www.artic.edu/iiif/2/${match.image_id}` : undefined,
+    /*
+     * De AIC NO se toma la imagen, y no es por calidad: la suya es mejor que
+     * la de Commons. Es que no se puede enseñar.
+     *
+     * `www.artic.edu` tiene protección antienlace de Cloudflare basada en la
+     * cabecera `Referer`. Medido pidiendo la misma URL con cabeceras
+     * distintas:
+     *
+     *     Referer: https://www.artic.edu/   -> 200
+     *     Referer: (nuestro dominio)        -> 403
+     *     sin Referer                       -> 403
+     *
+     * O sea que carga desde su propia web y desde ninguna otra. El navegador
+     * de nuestro usuario manda nuestro dominio, así que ve un hueco; y
+     * `referrerpolicy="no-referrer"` tampoco vale, porque sin Referer también
+     * responde 403. Su propia API sigue anunciando esa URL como la buena
+     * (`config.iiif_url`), así que esto no se detecta leyendo su
+     * documentación: solo pidiéndola.
+     *
+     * Dejando el campo vacío se conserva la imagen de Wikimedia Commons, que
+     * sí se puede enlazar. Fueron 83 obras sin imagen en el catálogo.
+     */
+    imageUrl: undefined,
+    iiifBase: undefined,
     imageLicense: match.is_public_domain ? 'Dominio público (AIC · CC0)' : 'Art Institute of Chicago',
     gallery: match.gallery_title,
     movementName: match.style_title,
@@ -268,6 +287,63 @@ export function applyEnrichment(work: CanonicalArtwork, extra: Enrichment): Cano
         }]
       : work.movements,
   };
+}
+
+/**
+ * ¿Vale la pena preguntar al museo por esta obra?
+ *
+ * Enriquecer cuesta unos 8 segundos por obra —búsqueda, ficha y reintentos—
+ * frente a los 0,35 s que cuesta traerla de Wikidata: 24 veces más. Preguntar
+ * por una obra que ya tiene imagen, técnica y medidas es gastar ese tiempo
+ * para no cambiar nada.
+ *
+ * Medido sobre el catálogo: ya están completas el 23% de las obras del Met, el
+ * 36% de las del Art Institute y el 47% de las de Harvard.
+ */
+export function needsEnrichment(work: CanonicalArtwork): boolean {
+  return !work.imageUrl
+    || !work.medium
+    || work.heightCm === undefined
+    || work.widthCm === undefined;
+}
+
+/**
+ * Enriquece un lote entero, con varias peticiones a la vez.
+ *
+ * En serie el ritmo medido fue de 7,3 obras/min contra las 172 obras/min de la
+ * ingesta sin enriquecer. El cuello no es el limitador de ritmo (120 ms), sino
+ * que cada obra son dos viajes HTTP —búsqueda y ficha— más sus reintentos, y
+ * uno detrás de otro. Las APIs de museo aguantan de sobra unas pocas
+ * simultáneas; WDQS no, y por eso allí no se hace lo mismo.
+ *
+ * Los fallos se ignoran a propósito: enriquecer es opcional y la obra ya tiene
+ * los datos de Wikidata, que bastan para su ficha.
+ */
+export async function enrichBatch(
+  works: CanonicalArtwork[],
+  api: 'met' | 'aic' | 'harvard',
+  concurrency = 6,
+): Promise<number> {
+  const pendientes = works.filter(needsEnrichment);
+  let enriquecidas = 0;
+
+  for (let i = 0; i < pendientes.length; i += concurrency) {
+    await Promise.all(pendientes.slice(i, i + concurrency).map(async (work) => {
+      try {
+        const extra = await enrich(work, api);
+        if (!extra) return;
+
+        // Se muta en vez de reemplazar: el índice de deduplicación guarda una
+        // referencia a este mismo objeto y perdería los cambios si se sustituye.
+        Object.assign(work, applyEnrichment(work, extra));
+        enriquecidas++;
+      } catch {
+        /* enriquecer es opcional; la obra ya tiene lo de Wikidata */
+      }
+    }));
+  }
+
+  return enriquecidas;
 }
 
 export async function enrich(

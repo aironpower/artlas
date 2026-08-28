@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { isLang, t, formatNumber } from '@/lib/i18n';
-import { mapPins, searchArtworks } from '@/lib/data';
+import { mapPins, searchArtworks, countArtists } from '@/lib/data';
 import WorldMap from '@/components/WorldMap';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import NearMe from '@/components/NearMe';
@@ -13,9 +13,10 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   const { lang } = await params;
   if (!isLang(lang)) notFound();
 
-  const [pins, highlights] = await Promise.all([
+  const [pins, highlights, artists] = await Promise.all([
     mapPins(lang),
     searchArtworks(lang, { limit: 12 }),
+    countArtists(),
   ]);
 
   const totalWorks = pins.reduce((sum, p) => sum + p.artwork_count, 0);
@@ -26,6 +27,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         <h1 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{t(lang, 'tagline')}</h1>
         <p className="muted">
           {formatNumber(lang, totalWorks)} {t(lang, 'artworks')} ·{' '}
+          {formatNumber(lang, artists)} {t(lang, 'artists')} ·{' '}
           {formatNumber(lang, pins.length)} {t(lang, 'museums')}
         </p>
       </section>

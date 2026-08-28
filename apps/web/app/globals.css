@@ -118,12 +118,60 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
 }
 
+/* Mapa por artista: un círculo por punto, en su posición exacta. Cuando varias
+   obras comparten museo comparten píxel, y el número dentro dice cuántas son. */
+.dot {
+  display: grid; place-items: center;
+  width: 13px; height: 13px; padding: 0;
+  background: var(--accent); color: #fff;
+  border: 2px solid var(--surface); border-radius: 999px;
+  font: inherit; font-size: 0.72rem; font-weight: 700; line-height: 1;
+  cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+.dot-many { width: 28px; height: 28px; }
+
+.popup-works {
+  margin: 8px 0 0; padding: 0; list-style: none;
+  font-size: 0.88rem; max-height: 210px; overflow-y: auto;
+}
+.popup-works li { padding: 2px 0; }
+.popup-works a { text-decoration: underline; text-decoration-color: var(--border); }
+
 .maplibregl-popup-content {
   background: var(--surface); color: var(--text);
   border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow);
   font-family: inherit;
 }
 .maplibregl-popup-tip { border-top-color: var(--surface) !important; }
+
+/* --- Obra con derechos: solo miniatura, y enlace al origen --------------- */
+
+/* La miniatura NO se estira. Ampliar una imagen que solo puede mostrarse
+   pequeña sería saltarse la condición por la que se puede mostrar, así que
+   `max-width` la limita a su tamaño natural y el hueco queda con fondo. */
+.thumb-only {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  margin: 0; padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.thumb-only img { max-width: 100%; height: auto; border-radius: 4px; }
+.thumb-only figcaption { text-align: center; max-width: 32ch; }
+
+.no-image {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; min-height: 160px; text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border); border-radius: var(--radius);
+}
+
+/* En la rejilla el hueco tiene que ocupar lo mismo que una tarjeta con foto,
+   o las filas se descuadran. */
+.card .thumb-only, .card .no-image {
+  aspect-ratio: 3 / 4; min-height: 0; padding: 10px;
+  box-shadow: var(--shadow);
+}
+.card .thumb-only img { max-height: 100%; object-fit: contain; }
 
 /* --- Ficha de obra -------------------------------------------------------- */
 
@@ -145,6 +193,30 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   background: var(--accent-soft); color: var(--accent);
   border-radius: 999px; font-size: 0.83rem; font-weight: 550;
 }
+
+/* --- Panel de revisión --------------------------------------------------- */
+
+.sev {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sev-error   { background: var(--accent-soft); color: var(--accent); }
+.sev-warning { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+.sev-info    { background: transparent; color: var(--muted); }
+
+.findings { list-style: none; margin: 18px 0 0; padding: 0; }
+.findings li {
+  display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;
+  padding: 12px 0; border-top: 1px solid var(--border);
+}
+.findings li > div { min-width: 0; }
+.findings .sev { margin-right: 8px; }
+.acciones { display: flex; gap: 8px; flex-shrink: 0; }
+.acciones .btn { padding: 5px 10px; font-size: 0.83rem; }
+
+.login { max-width: 420px; margin: 60px auto; text-align: center; }
+.login form { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
 
 /* --- Varios --------------------------------------------------------------- */
 

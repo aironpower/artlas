@@ -12,9 +12,10 @@ import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchArtworks, fetchInstitution } from './sources/wikidata.js';
-import { applyEnrichment, enrich } from './sources/museum-apis.js';
+import { enrichBatch } from './sources/museum-apis.js';
 import { DedupeIndex, mergeArtworks } from './normalize.js';
 import { IdCache, refreshCounters, upsertArtworks } from './db.js';
+import { classify } from './audit/gate.js';
 import type { CanonicalArtwork, IngestStats, MuseumSeed } from './types.js';
 
 const CHECKPOINT_DIR = '.checkpoints';
@@ -32,6 +33,12 @@ export interface PipelineOptions {
   force: boolean;
   /** Consulta la API propia del museo para mejorar imagen y ficha. */
   enrich: boolean;
+  /*
+   * Si es false, también se traen las obras SIN imagen. Se guardan como
+   * `pending`: existen, las conocemos, y esperan a que alguna fuente nos dé
+   * una imagen que podamos enseñar. Para el arte del siglo XX son la mayoría.
+   */
+  requireImage: boolean;
 }
 
 /*
@@ -56,6 +63,7 @@ export const DEFAULT_OPTIONS: PipelineOptions = {
   dryRun: false,
   force: false,
   enrich: true,
+  requireImage: true,
 };
 
 /**
@@ -114,7 +122,10 @@ export async function ingestMuseum(
   dedupe: DedupeIndex,
   options: PipelineOptions,
 ): Promise<IngestStats> {
-  const stats: IngestStats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
+  const stats: IngestStats = {
+    fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+    published: 0, pending: 0, rejected: 0, repaired: 0,
+  };
 
   if (!options.force) {
     const done = await readCheckpoint(museum.qid);
@@ -150,26 +161,53 @@ export async function ingestMuseum(
   console.log(`  → ${institution.name} (${institution.city ?? '?'}, ${institution.country ?? '?'})`);
 
   let batch: CanonicalArtwork[] = [];
+  let enriched = 0;
 
   const flush = async () => {
     if (batch.length === 0) return;
 
+    /*
+     * Segunda pasada contra la API del propio museo, si la tiene. Solo para
+     * las obras a las que les falta algo que esa API pueda aportar: preguntar
+     * por una que ya tiene imagen, técnica y medidas cuesta ocho segundos para
+     * no cambiar nada.
+     */
+    if (options.enrich && museum.api) {
+      enriched += await enrichBatch(batch, museum.api);
+    }
+
+    /*
+     * El clasificador, antes de escribir. Ya no descarta nada: decide con qué
+     * estado entra cada obra. Va aquí y no dentro de `upsertArtworks` porque
+     * las reparaciones —quitar la autoría anónima, quitar una época de la lista
+     * de movimientos— tienen que aplicarse ANTES de resolver las claves
+     * foráneas; si no, se crearían el artista y el movimiento que acabamos de
+     * decidir que no existen.
+     */
+    const gate = classify(batch);
+
+    for (const row of gate.rows) {
+      if (row.status === 'published') stats.published++;
+      else if (row.status === 'pending') stats.pending++;
+      else stats.rejected++;
+    }
+    stats.repaired += gate.repaired.length;
+
     if (options.dryRun) {
-      stats.inserted += batch.length;
+      stats.inserted += gate.rows.length;
     } else {
-      const result = await upsertArtworks(db!, cache!, batch);
+      const result = await upsertArtworks(db!, cache!, gate.rows);
       stats.inserted += result.inserted;
       stats.updated += result.updated;
     }
+
     batch = [];
   };
-
-  let enriched = 0;
 
   for await (const raw of fetchArtworks(museum, institution, {
     minNotability: options.minNotability,
     limit: options.limitPerMuseum,
-    requireImage: true,
+    requireImage: options.requireImage,
   })) {
     stats.fetched++;
 
@@ -182,27 +220,14 @@ export async function ingestMuseum(
       continue;
     }
 
-    let work = raw;
-
-    // Segunda pasada contra la API del propio museo, si la tiene. Solo aplica
-    // a los museos marcados con `api` en la semilla; para el resto la única
-    // fuente es Wikidata. Un fallo aquí no invalida la obra: se guarda con los
-    // datos de Wikidata, que ya son suficientes para la ficha.
-    if (options.enrich && museum.api) {
-      try {
-        const extra = await enrich(work, museum.api);
-        if (extra) {
-          work = applyEnrichment(work, extra);
-          enriched++;
-        }
-      } catch {
-        // Silencioso a propósito: enriquecer es opcional y las APIs de museo
-        // fallan a menudo. Ensuciar el log con esto ocultaría errores reales.
-      }
-    }
-
-    dedupe.add(work);
-    batch.push(work);
+    /*
+     * El enriquecimiento ya NO se hace aquí, obra por obra. Se hacía, y era el
+     * cuello de botella de la ingesta entera: 7,3 obras/min frente a las 172
+     * de un museo sin API propia, 24 veces más lento. Ahora se hace por lotes
+     * y con varias peticiones a la vez, justo antes de escribir.
+     */
+    dedupe.add(raw);
+    batch.push(raw);
 
     if (batch.length >= options.batchSize) await flush();
   }
@@ -227,11 +252,23 @@ export async function ingestMuseum(
     }
   }
 
-  await writeCheckpoint(museum.qid, stats.inserted, options.minNotability);
+  /*
+   * El checkpoint solo si se ha escrito de verdad. En modo seco no se ha
+   * guardado nada, así que marcar el museo como hecho es mentir: el siguiente
+   * intento REAL se lo salta y el museo se queda fuera del catálogo sin que
+   * nadie lo note. Pasó con el Palazzo Vecchio, y de no haberlo visto se
+   * habría llevado por delante parte del barrido completo.
+   */
+  if (!options.dryRun) {
+    await writeCheckpoint(museum.qid, stats.inserted, options.minNotability);
+  }
 
   console.log(
-    `     ${stats.inserted} obras` +
+    `     ${stats.published} publicadas` +
+    `${stats.pending > 0 ? `, ${stats.pending} esperando datos` : ''}` +
+    `${stats.rejected > 0 ? `, ${stats.rejected} no son obras` : ''}` +
     `${stats.skipped > 0 ? `, ${stats.skipped} duplicadas` : ''}` +
+    `${stats.repaired > 0 ? `, ${stats.repaired} corregidas` : ''}` +
     `${enriched > 0 ? `, ${enriched} enriquecidas vía ${museum.api}` : ''}`,
   );
 
@@ -246,7 +283,10 @@ export async function ingestAll(
   const cache = db ? new IdCache(db) : null;
   const dedupe = new DedupeIndex();
 
-  const total: IngestStats = { fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0 };
+  const total: IngestStats = {
+    fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+    published: 0, pending: 0, rejected: 0, repaired: 0,
+  };
 
   for (const [i, museum] of museums.entries()) {
     console.log(`\n[${i + 1}/${museums.length}] ${museum.name}`);
@@ -258,6 +298,10 @@ export async function ingestAll(
       total.updated += stats.updated;
       total.skipped += stats.skipped;
       total.errors += stats.errors;
+      total.published += stats.published;
+      total.pending += stats.pending;
+      total.rejected += stats.rejected;
+      total.repaired += stats.repaired;
     } catch (err) {
       // Un museo que falla no debe tumbar una ingesta de horas.
       console.error(`  ✗ ${museum.name}: ${(err as Error).message}`);

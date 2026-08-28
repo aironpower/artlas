@@ -14,6 +14,7 @@ import type {
   CanonicalArtist, CanonicalArtwork, CanonicalInstitution, CanonicalMovement,
   Localized,
 } from './types.js';
+import type { Classified } from './audit/gate.js';
 import { slugify } from './normalize.js';
 
 /**
@@ -202,11 +203,53 @@ export class IdCache {
    * Sin QID hay que buscar por slug antes de insertar, o el mismo movimiento
    * acabaría duplicado con y sin identificador.
    */
+  /**
+   * Alias de movimiento cargados una sola vez.
+   *
+   * Son decenas de filas y se consultarían por cada movimiento de cada obra;
+   * traerlos de golpe cambia miles de viajes de red por uno.
+   */
+  private aliases: Map<string, number> | null = null;
+
+  private async loadAliases(): Promise<Map<string, number>> {
+    if (this.aliases) return this.aliases;
+
+    const { data, error } = await this.db
+      .from('movement_aliases').select('alias_qid, alias_slug, movement_id');
+
+    // Si la tabla no existe todavía (esquema viejo), se sigue sin alias.
+    if (error) return (this.aliases = new Map());
+
+    const map = new Map<string, number>();
+    for (const a of data ?? []) {
+      if (a.alias_qid) map.set(`qid:${a.alias_qid}`, a.movement_id);
+      if (a.alias_slug) map.set(`slug:${a.alias_slug}`, a.movement_id);
+    }
+
+    return (this.aliases = map);
+  }
+
   async movementId(movement: CanonicalMovement): Promise<number | null> {
     const slug = slugify(movement.name);
     const key = movement.wikidataQid ?? `name:${slug}`;
     const cached = this.movements.get(key);
     if (cached !== undefined) return cached;
+
+    /*
+     * Antes de nada, ¿alguien decidió ya que esto es otro movimiento?
+     *
+     * Sin esta consulta, fusionar duplicados sería trabajo perdido: la
+     * siguiente ingesta volvería a crear "Baroque painting" en cuanto una obra
+     * lo declarara, y a los dos días habría 237 movimientos otra vez.
+     */
+    const aliases = await this.loadAliases();
+    const aliased = (movement.wikidataQid ? aliases.get(`qid:${movement.wikidataQid}`) : undefined)
+      ?? aliases.get(`slug:${slug}`);
+
+    if (aliased !== undefined) {
+      this.movements.set(key, aliased);
+      return aliased;
+    }
 
     if (!movement.wikidataQid) {
       const { data: existing } = await this.db
@@ -265,15 +308,24 @@ export interface UpsertResult { inserted: number; updated: number }
 export async function upsertArtworks(
   db: SupabaseClient,
   cache: IdCache,
-  works: CanonicalArtwork[],
+  /*
+   * Cada obra viene con el estado que le puso el clasificador. No se recibe
+   * `CanonicalArtwork[]` a secas porque escribir sin estado dejaría todo en
+   * `pending` por el valor por defecto de la columna, y el catálogo
+   * desaparecería de la app entera en la siguiente ingesta.
+   */
+  classified: Classified[],
 ): Promise<UpsertResult> {
-  if (works.length === 0) return { inserted: 0, updated: 0 };
+  if (classified.length === 0) return { inserted: 0, updated: 0 };
+
+  const works = classified.map((c) => c.work);
 
   // 1. Resolver las claves foráneas (con caché, casi siempre es un hit).
   const rows = [];
   const movementsByIndex: number[][] = [];
 
-  for (const work of works) {
+  for (const [index, work] of works.entries()) {
+    const meta = classified[index]!;
     const institutionId = work.institution ? await cache.institutionId(work.institution) : null;
     const artistId = work.artist ? await cache.artistId(work.artist) : null;
 
@@ -306,6 +358,11 @@ export async function upsertArtworks(
       notability: work.notability ?? 0,
       // Copia de la geometría del museo: el mapa filtra por bbox sin join.
       location: point(work.institution?.lat, work.institution?.lng),
+
+      status: meta.status,
+      pending_reason: meta.reason,
+      rights_status: meta.rightsStatus,
+      inventory_number: work.inventoryNumber ?? null,
     });
   }
 
@@ -317,12 +374,24 @@ export async function upsertArtworks(
 
   if (error) throw new Error(`lote de obras: ${error.message}`);
 
-  // 3. Traducciones de las obras: una fila por obra e idioma disponible.
-  //    Van todas en un upsert porque son ~5 filas por obra y hacerlo obra a
-  //    obra multiplicaría por cinco el número de viajes a la red.
+  /*
+   * 3. Traducciones. Van todas en un upsert porque son ~3 filas por obra y
+   *    hacerlo obra a obra multiplicaría por tres los viajes a la red.
+   *
+   *    SOLO para lo publicado, y esto es lo que hace viable amasar el catálogo
+   *    entero. Una obra pendiente no se muestra en ninguna parte, así que sus
+   *    traducciones no las lee nadie; pero cada fila arrastra además su vector
+   *    de búsqueda, que es lo que de verdad ocupa. Con 182.000 obras por tres
+   *    idiomas serían ~550.000 filas y unos 240 MB de los 500 MB del plan
+   *    gratuito, gastados en texto invisible.
+   *
+   *    La obra pendiente conserva `artworks.title`, el título neutro, que es
+   *    suficiente para listarla en el panel de revisión. Al promoverla hay que
+   *    hidratarla: es el precio de esta decisión y está asumido.
+   */
   const translations = data.flatMap((row, i) => {
     const work = works[i];
-    if (!work) return [];
+    if (!work || classified[i]?.status !== 'published') return [];
 
     return [...toTranslationRows(
       {

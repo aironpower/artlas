@@ -6,7 +6,13 @@
  * aquí sin añadirlo allí deja la búsqueda sin lematizar en ese idioma.
  */
 
-export const LANGS = ['es', 'en', 'fr', 'it', 'de', 'pt', 'nl'] as const;
+/*
+ * Tres idiomas activos. Los textos de interfaz de `it`, `de`, `pt` y `nl`
+ * siguen más abajo, completos: reactivarlos es volver a ponerlos en esta lista
+ * y en `LANG_NAMES`. Lo que no cabe hoy en el plan gratuito de Supabase son
+ * sus TRADUCCIONES DE CATÁLOGO, que son una fila por obra e idioma.
+ */
+export const LANGS = ['es', 'en', 'fr'] as const;
 export type Lang = (typeof LANGS)[number];
 
 export const DEFAULT_LANG: Lang = 'es';
@@ -15,10 +21,6 @@ export const LANG_NAMES: Record<Lang, string> = {
   es: 'Español',
   en: 'English',
   fr: 'Français',
-  it: 'Italiano',
-  de: 'Deutsch',
-  pt: 'Português',
-  nl: 'Nederlands',
 };
 
 export function isLang(value: string): value is Lang {
@@ -36,6 +38,7 @@ const UI = {
     artworks: 'obras',
     artwork: 'obra',
     museums: 'museos',
+    artists: 'artistas',
     filters: 'Filtros',
     movement: 'Movimiento',
     category: 'Categoría',
@@ -53,6 +56,11 @@ const UI = {
     viewOnMap: 'Ver en el mapa',
     allWorksBy: 'Todas las obras de',
     worksHere: 'Obras en este museo',
+    viewAtMuseum: 'Ver en el museo',
+    imageRestricted: 'Imagen no disponible por derechos de autor',
+    rightsNotice: 'Obra con derechos de autor. La imagen la sirve el museo.',
+    whereToSee: 'Dónde ver sus obras',
+    sharedPointNote: 'Cada punto es el museo donde se expone la obra. Las obras de un mismo museo comparten posición exacta.',
     loading: 'Cargando…',
     locating: 'Buscando tu ubicación…',
     locationDenied: 'No has dado permiso de ubicación. Usa el buscador o el mapa.',
@@ -69,6 +77,7 @@ const UI = {
     artworks: 'artworks',
     artwork: 'artwork',
     museums: 'museums',
+    artists: 'artists',
     filters: 'Filters',
     movement: 'Movement',
     category: 'Category',
@@ -86,6 +95,11 @@ const UI = {
     viewOnMap: 'View on map',
     allWorksBy: 'All works by',
     worksHere: 'Works in this museum',
+    viewAtMuseum: 'View at the museum',
+    imageRestricted: 'Image unavailable for copyright reasons',
+    rightsNotice: 'Work still in copyright. The image is served by the museum.',
+    whereToSee: 'Where to see the works',
+    sharedPointNote: 'Each dot is the museum where the work is on display. Works in the same museum share the exact same position.',
     loading: 'Loading…',
     locating: 'Finding your location…',
     locationDenied: 'Location permission denied. Use search or the map.',
@@ -102,6 +116,7 @@ const UI = {
     artworks: 'œuvres',
     artwork: 'œuvre',
     museums: 'musées',
+    artists: 'artistes',
     filters: 'Filtres',
     movement: 'Mouvement',
     category: 'Catégorie',
@@ -119,6 +134,11 @@ const UI = {
     viewOnMap: 'Voir sur la carte',
     allWorksBy: 'Toutes les œuvres de',
     worksHere: 'Œuvres dans ce musée',
+    viewAtMuseum: 'Voir au musée',
+    imageRestricted: 'Image indisponible pour raisons de droits d’auteur',
+    rightsNotice: 'Œuvre sous droits. L’image est servie par le musée.',
+    whereToSee: 'Où voir ses œuvres',
+    sharedPointNote: 'Chaque point est le musée où l’œuvre est exposée. Les œuvres d’un même musée partagent exactement la même position.',
     loading: 'Chargement…',
     locating: 'Recherche de votre position…',
     locationDenied: 'Permission de localisation refusée. Utilisez la recherche ou la carte.',
@@ -135,6 +155,7 @@ const UI = {
     artworks: 'opere',
     artwork: 'opera',
     museums: 'musei',
+    artists: 'artisti',
     filters: 'Filtri',
     movement: 'Movimento',
     category: 'Categoria',
@@ -152,6 +173,8 @@ const UI = {
     viewOnMap: 'Vedi sulla mappa',
     allWorksBy: 'Tutte le opere di',
     worksHere: 'Opere in questo museo',
+    whereToSee: 'Dove vedere le sue opere',
+    sharedPointNote: 'Ogni punto è il museo in cui l’opera è esposta. Le opere dello stesso museo condividono esattamente la stessa posizione.',
     loading: 'Caricamento…',
     locating: 'Ricerca della tua posizione…',
     locationDenied: 'Permesso di posizione negato. Usa la ricerca o la mappa.',
@@ -168,6 +191,7 @@ const UI = {
     artworks: 'Werke',
     artwork: 'Werk',
     museums: 'Museen',
+    artists: 'Künstler',
     filters: 'Filter',
     movement: 'Stilrichtung',
     category: 'Kategorie',
@@ -185,6 +209,8 @@ const UI = {
     viewOnMap: 'Auf der Karte zeigen',
     allWorksBy: 'Alle Werke von',
     worksHere: 'Werke in diesem Museum',
+    whereToSee: 'Wo die Werke zu sehen sind',
+    sharedPointNote: 'Jeder Punkt ist das Museum, in dem das Werk ausgestellt ist. Werke im selben Museum teilen exakt dieselbe Position.',
     loading: 'Lädt…',
     locating: 'Standort wird gesucht…',
     locationDenied: 'Standortfreigabe verweigert. Nutze die Suche oder die Karte.',
@@ -201,6 +227,7 @@ const UI = {
     artworks: 'obras',
     artwork: 'obra',
     museums: 'museus',
+    artists: 'artistas',
     filters: 'Filtros',
     movement: 'Movimento',
     category: 'Categoria',
@@ -218,6 +245,8 @@ const UI = {
     viewOnMap: 'Ver no mapa',
     allWorksBy: 'Todas as obras de',
     worksHere: 'Obras neste museu',
+    whereToSee: 'Onde ver as obras',
+    sharedPointNote: 'Cada ponto é o museu onde a obra está exposta. As obras do mesmo museu partilham exatamente a mesma posição.',
     loading: 'A carregar…',
     locating: 'A procurar a tua localização…',
     locationDenied: 'Permissão de localização negada. Usa a pesquisa ou o mapa.',
@@ -234,6 +263,7 @@ const UI = {
     artworks: 'werken',
     artwork: 'werk',
     museums: 'musea',
+    artists: 'kunstenaars',
     filters: 'Filters',
     movement: 'Stroming',
     category: 'Categorie',
@@ -251,6 +281,8 @@ const UI = {
     viewOnMap: 'Op de kaart',
     allWorksBy: 'Alle werken van',
     worksHere: 'Werken in dit museum',
+    whereToSee: 'Waar je de werken ziet',
+    sharedPointNote: 'Elke stip is het museum waar het werk hangt. Werken in hetzelfde museum delen exact dezelfde positie.',
     loading: 'Laden…',
     locating: 'Je locatie zoeken…',
     locationDenied: 'Locatietoestemming geweigerd. Gebruik zoeken of de kaart.',
@@ -264,6 +296,19 @@ export type UIKey = keyof (typeof UI)['es'];
 
 export function t(lang: Lang, key: UIKey): string {
   return UI[lang][key] ?? UI[DEFAULT_LANG][key];
+}
+
+/**
+ * Primera letra en mayúscula, sin tocar el resto.
+ *
+ * Las etiquetas de Wikidata en castellano y otras lenguas romances vienen en
+ * minúscula ("impresionismo", "escuela veneciana"), porque son nombres comunes
+ * y así se escriben en un texto corrido. En una lista de filtros o en una
+ * etiqueta suelta chirrían. Solo se toca la inicial: pasar la cadena entera por
+ * un `initcap` destrozaría "pintura del Siglo de oro neerlandés" y "Les Nabis".
+ */
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /** Formatea metros como '350 m' o '2,4 km' según el idioma. */

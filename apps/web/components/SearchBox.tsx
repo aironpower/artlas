@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { t, type Lang } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 
 export default function SearchBox({ lang }: { lang: Lang }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export default function SearchBox({ lang }: { lang: Lang }) {
       onSubmit={(e) => {
         e.preventDefault();
         const q = value.trim();
-        router.push(`/${lang}/buscar${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+        router.push(`${path(lang, 'search')}${q ? `?q=${encodeURIComponent(q)}` : ''}`);
       }}
     >
       <input

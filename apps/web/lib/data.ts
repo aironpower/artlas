@@ -13,6 +13,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Lang } from './i18n';
+import { capitalize } from './i18n';
 
 /**
  * Cliente perezoso.
@@ -48,7 +49,25 @@ export const supabase = new Proxy({} as SupabaseClient, {
 
 // --- Tipos que devuelven las RPC -------------------------------------------
 
-export interface ArtworkCard {
+/**
+ * Qué se puede enseñar de una obra. Lo decide `image_mode()` en SQL y la
+ * interfaz obedece: si el criterio viviera en el componente, habría uno por
+ * cada sitio donde se pinta una imagen.
+ *
+ *   full       la imagen completa
+ *   thumbnail  solo la miniatura del proveedor, con enlace obligado al origen
+ *   none       ficha sin imagen
+ */
+export type ImageMode = 'full' | 'thumbnail' | 'none';
+
+export interface Rights {
+  rights_status: 'public_domain' | 'in_copyright' | 'unknown';
+  thumbnail_url: string | null;
+  origin_url: string | null;
+  image_mode: ImageMode;
+}
+
+export interface ArtworkCard extends Rights {
   id: number;
   title: string;
   slug: string;
@@ -66,7 +85,7 @@ export interface ArtworkCard {
   rank: number;
 }
 
-export interface NearbyArtwork {
+export interface NearbyArtwork extends Rights {
   id: number;
   title: string;
   slug: string;
@@ -91,6 +110,43 @@ export interface MapPin {
   rating_avg: number | null;
 }
 
+/**
+ * Obra de un artista con su punto en el mapa.
+ *
+ * lat/lng son las coordenadas del museo donde se expone: dos obras del mismo
+ * museo traen EXACTAMENTE el mismo par. No es un redondeo ni un fallo de la
+ * consulta, es el único dato de posición que existe en el catálogo.
+ */
+export interface ArtistWork extends Rights {
+  id: number;
+  title: string;
+  slug: string;
+  image_url: string | null;
+  year_start: number | null;
+  date_display: string | null;
+  category: string;
+  institution_id: number | null;
+  institution_name: string | null;
+  institution_slug: string | null;
+  city: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  notability: number;
+}
+
+export interface Artist {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  birth_year: number | null;
+  death_year: number | null;
+  nationality: string | null;
+  image_url: string | null;
+  artwork_count: number;
+}
+
 export interface SearchFilters {
   query?: string;
   movement?: string;
@@ -108,20 +164,30 @@ export async function searchArtworks(
   lang: Lang,
   filters: SearchFilters = {},
 ): Promise<ArtworkCard[]> {
+  /*
+   * `|| null` y no `?? null`, y la diferencia importa.
+   *
+   * Los desplegables de filtro tienen una opción vacía ("—"), así que el
+   * formulario envía `mov=` en lugar de omitir el parámetro. Con `??` esa
+   * cadena vacía llegaba tal cual al SQL, que buscaba un movimiento cuyo slug
+   * fuera "" — no existe ninguno, así que buscar sin elegir filtro devolvía
+   * CERO resultados. Con `||`, la cadena vacía se convierte en null, que es lo
+   * que significa: "sin filtrar por esto".
+   */
   const { data, error } = await db().rpc('search_artworks', {
-    p_query: filters.query ?? null,
+    p_query: filters.query || null,
     p_lang: lang,
-    p_movement: filters.movement ?? null,
-    p_artist: filters.artist ?? null,
-    p_country: filters.country ?? null,
+    p_movement: filters.movement || null,
+    p_artist: filters.artist || null,
+    p_country: filters.country || null,
     p_year_from: filters.yearFrom ?? null,
     p_year_to: filters.yearTo ?? null,
-    p_category: filters.category ?? null,
+    p_category: filters.category || null,
     max_results: filters.limit ?? 60,
   });
 
   if (error) throw new Error(`búsqueda: ${error.message}`);
-  return (data ?? []) as ArtworkCard[];
+  return hideRestrictedImage((data ?? []) as ArtworkCard[]);
 }
 
 export async function artworksNear(
@@ -141,7 +207,7 @@ export async function artworksNear(
   });
 
   if (error) throw new Error(`cercanas: ${error.message}`);
-  return (data ?? []) as NearbyArtwork[];
+  return hideRestrictedImage((data ?? []) as NearbyArtwork[]);
 }
 
 export async function mapPins(lang: Lang): Promise<MapPin[]> {
@@ -157,6 +223,96 @@ export async function mapPins(lang: Lang): Promise<MapPin[]> {
   return (data ?? []) as MapPin[];
 }
 
+/**
+ * Cuántos artistas tienen obra en el catálogo.
+ *
+ * `head: true` pide solo la cabecera con el total: no trae ni una fila, que
+ * para 1.300 artistas de los que la portada solo enseña el número es la
+ * diferencia entre una consulta gratis y traerse la tabla entera.
+ */
+export async function countArtists(): Promise<number> {
+  const { count, error } = await db()
+    .from('artists')
+    .select('*', { count: 'exact', head: true })
+    .gt('artwork_count', 0);
+
+  if (error) throw new Error(`artistas: ${error.message}`);
+  return count ?? 0;
+}
+
+/** Ficha del artista. Devuelve null si el slug no existe. */
+export async function getArtist(lang: Lang, slug: string): Promise<Artist | null> {
+  const { data, error } = await db().rpc('get_artist', { p_slug: slug, p_lang: lang });
+
+  if (error) throw new Error(`artista ${slug}: ${error.message}`);
+  return ((data ?? []) as Artist[])[0] ?? null;
+}
+
+/**
+ * Todas las obras de un artista, cada una con su posición.
+ *
+ * El límite alto es deliberado: el más prolífico del catálogo tiene 175 obras,
+ * así que 500 las cubre a todas y evita paginar un mapa, que quedaría
+ * incompleto sin avisar.
+ */
+export async function artworksByArtist(
+  lang: Lang,
+  slug: string,
+  limit = 500,
+): Promise<ArtistWork[]> {
+  const { data, error } = await db().rpc('artworks_by_artist', {
+    p_slug: slug,
+    p_lang: lang,
+    max_results: limit,
+  });
+
+  if (error) throw new Error(`obras de ${slug}: ${error.message}`);
+  return hideRestrictedImage((data ?? []) as ArtistWork[]);
+}
+
+/**
+ * Quita la URL de la imagen cuando la política dice que no se puede enseñar.
+ *
+ * Sin esto, la obra restringida no pinta la imagen pero SÍ manda su URL al
+ * navegador, dentro de los datos serializados de la página: cualquiera que
+ * mire el código fuente tiene la ubicación del fichero que hemos decidido no
+ * mostrar. Se vio al probar la rama `none` y buscar el dominio en el HTML.
+ *
+ * Lo suyo sería que tampoco la devolviera SQL. Se hace aquí porque cubre de
+ * una vez los dos caminos —las RPC y el select de la ficha— sin volver a
+ * recrear tres funciones; conviene bajarlo a SQL cuando se toquen por otra
+ * razón.
+ */
+function hideRestrictedImage<T extends { image_url: string | null; image_mode?: ImageMode }>(
+  rows: T[],
+): T[] {
+  return rows.map((row) =>
+    row.image_mode && row.image_mode !== 'full' ? { ...row, image_url: null } : row);
+}
+
+/** Servidores cuyo alojamiento ya afirma que el fichero es libre. Misma lista
+ * que `image_mode()` en la migración 0018: añadir uno es una decisión de
+ * derechos, no técnica. */
+const HOSTS_LIBRES = new Set([
+  'commons.wikimedia.org', 'upload.wikimedia.org', 'images.metmuseum.org',
+]);
+
+export function imageModeFor(
+  rights: Rights['rights_status'],
+  imageUrl: string | null,
+  thumbnailUrl: string | null,
+): ImageMode {
+  if (imageUrl) {
+    try {
+      if (HOSTS_LIBRES.has(new URL(imageUrl).host)) return 'full';
+    } catch { /* URL rota: decide el resto de la política */ }
+  }
+
+  if (rights === 'public_domain' && imageUrl) return 'full';
+  if (thumbnailUrl) return 'thumbnail';
+  return 'none';
+}
+
 /** Ficha completa de una obra, con sus movimientos y su museo. */
 export async function getArtwork(lang: Lang, id: number) {
   const { data, error } = await db()
@@ -165,6 +321,7 @@ export async function getArtwork(lang: Lang, id: number) {
       id, slug, title, year_start, year_end, date_display, category,
       height_cm, width_cm, image_url, iiif_base, image_license,
       source, source_url, notability, rating_avg, rating_count,
+      rights_status, thumbnail_url, origin_url,
       artists ( id, slug, name, birth_year, death_year, nationality,
                 artist_translations ( lang, name, description ) ),
       institutions ( id, slug, name, city, country, country_code, website,
@@ -204,6 +361,12 @@ function pick(
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function localizeArtwork(row: any, lang: Lang) {
+  const mode = imageModeFor(
+    row.rights_status as Rights['rights_status'],
+    row.image_url as string | null,
+    row.thumbnail_url as string | null,
+  );
+
   const text = pick(row.artwork_translations, lang);
   const artistText = pick(row.artists?.artist_translations, lang);
   const instText = pick(row.institutions?.institution_translations, lang);
@@ -222,10 +385,21 @@ function localizeArtwork(row: any, lang: Lang) {
     heightCm: row.height_cm as number | null,
     widthCm: row.width_cm as number | null,
 
-    imageUrl: row.image_url as string | null,
-    iiifBase: row.iiif_base as string | null,
+    imageUrl: (mode === 'full' ? row.image_url : null) as string | null,
+    iiifBase: (mode === 'full' ? row.iiif_base : null) as string | null,
     imageLicense: row.image_license as string | null,
     sourceUrl: row.source_url as string | null,
+
+    rightsStatus: row.rights_status as Rights['rights_status'],
+    thumbnailUrl: row.thumbnail_url as string | null,
+    originUrl: row.origin_url as string | null,
+    /*
+     * La ficha se lee con un select y no por RPC, así que aquí no llega
+     * `image_mode` calculado. Se replica la MISMA política, y por eso está
+     * junto a la que la define en SQL en vez de escondida en un componente.
+     * Si cambia una, cambia la otra.
+     */
+    imageMode: mode,
 
     ratingAvg: row.rating_avg as number | null,
     ratingCount: row.rating_count as number,
@@ -258,7 +432,7 @@ function localizeArtwork(row: any, lang: Lang) {
       .map((m: any) => ({
         id: m.id as number,
         slug: m.slug as string,
-        name: pick(m.movement_translations, lang)?.name ?? m.name,
+        name: capitalize(pick(m.movement_translations, lang)?.name ?? m.name),
       })),
   };
 }
@@ -278,7 +452,7 @@ export async function listMovements(lang: Lang) {
 
   return (data ?? []).map((m: any) => ({
     slug: m.slug as string,
-    name: pick(m.movement_translations, lang)?.name ?? m.name,
+    name: capitalize(pick(m.movement_translations, lang)?.name ?? m.name),
     count: m.artwork_count as number,
   }));
 }

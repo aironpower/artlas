@@ -200,7 +200,28 @@ export class DedupeIndex {
       const hit = this.byQid.get(work.wikidataQid);
       if (hit) return hit;
     }
-    return this.byFingerprint.get(fingerprint(work));
+
+    const hit = this.byFingerprint.get(fingerprint(work));
+
+    /*
+     * Dos ítems de Wikidata con QID distinto son obras DISTINTAS, por mucho que
+     * compartan título, autor y década. La huella existe para emparejar la
+     * misma obra entre fuentes distintas —Wikidata con el Met, con AIC—, no
+     * para decidir que dos entradas del propio Wikidata son la misma.
+     *
+     * Sin esta comprobación, los paneles de un mismo retablo se fusionaban en
+     * una sola fila: en Wikidata es normal que compartan etiqueta exacta
+     * ("Episodes from the Lives of Mary Magdalen"), autor y década. El barrido
+     * completo dejó 1.567 filas con el `source_id` de una obra y el
+     * `wikidata_qid` de otra, y la siguiente ingesta reventaba al chocar contra
+     * `artworks_wikidata_qid_key`. Con el catálogo curado apenas se notaba;
+     * con 113.000 obras se hizo evidente.
+     */
+    if (hit?.wikidataQid && work.wikidataQid && hit.wikidataQid !== work.wikidataQid) {
+      return undefined;
+    }
+
+    return hit;
   }
 
   add(work: CanonicalArtwork): void {

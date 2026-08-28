@@ -7,6 +7,14 @@ export const revalidate = 3600;
 
 interface Params { params: Promise<{ lang: string }>; searchParams: Promise<Record<string, string | undefined>> }
 
+/*
+ * Tope de resultados. Se declara aquí y no se deja al valor por defecto de
+ * `searchArtworks` porque la cabecera necesita saberlo: si vienen justo LIMIT
+ * resultados, el total real es ese o más, y anunciar "60 obras" a secas era
+ * decir que el catálogo tiene 60 cuadros de Rembrandt cuando tiene 119.
+ */
+const LIMIT = 60;
+
 export default async function SearchPage({ params, searchParams }: Params) {
   const { lang } = await params;
   if (!isLang(lang)) notFound();
@@ -15,10 +23,12 @@ export default async function SearchPage({ params, searchParams }: Params) {
   const filters = {
     query: sp.q,
     movement: sp.mov,
+    artist: sp.artista,
     country: sp.pais,
     category: sp.cat,
     yearFrom: sp.desde ? Number(sp.desde) : undefined,
     yearTo: sp.hasta ? Number(sp.hasta) : undefined,
+    limit: LIMIT,
   };
 
   const [results, movements, countries] = await Promise.all([
@@ -32,7 +42,8 @@ export default async function SearchPage({ params, searchParams }: Params) {
       <h1 style={{ paddingTop: 26 }}>
         {sp.q ? `“${sp.q}”` : t(lang, 'explore')}
         <span className="muted" style={{ fontSize: '1rem', fontWeight: 400, marginLeft: 10 }}>
-          {formatNumber(lang, results.length)} {t(lang, 'artworks')}
+          {formatNumber(lang, results.length)}{results.length === LIMIT && '+'}{' '}
+          {t(lang, 'artworks')}
         </span>
       </h1>
 

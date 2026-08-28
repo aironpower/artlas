@@ -5,3 +5,6 @@ dist/
 *.log
 .cache/
 .checkpoints/
+.next/
+out/
+supabase/.temp/

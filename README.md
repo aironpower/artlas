@@ -13,9 +13,10 @@ El proyecto son dos aplicaciones sobre una misma base de datos:
 
 El estado al cerrar cada sesión y lo pendiente están en [NOTAS.md](NOTAS.md).
 
-Estado: **funcionando de punta a punta.** Catálogo multilingüe en 7 idiomas
-(español, inglés, francés, italiano, alemán, portugués y neerlandés), ingesta
-verificada contra las APIs reales y app web con mapa, buscador y fichas.
+Estado: **funcionando de punta a punta**, con ~114.000 obras de 48 museos.
+Trilingüe (español, inglés y francés), ingesta verificada contra las APIs
+reales, app web con mapa, buscador, fichas de obra, museo y artista, y un
+panel de revisión para administradores.
 
 ---
 
@@ -101,31 +102,59 @@ ningún error: bbox −180..180 daba 0 museos mientras que −10..30 daba 6. Se
 arregla comparando cajas en el plano con `&&` sobre `geometry`, que para puntos
 equivale a la intersección exacta y además usa índice.
 
-## Cómo se curan las 5.000-20.000 obras
+## Guardar todo, mostrar lo que se pueda
 
-El catálogo no aspira a todo lo que hay: aspira a lo que merece una ficha. El
-criterio es **`sitelinks`**, el número de Wikipedias que enlazan la obra, que
-resulta ser un proxy excelente de importancia y viene gratis en Wikidata.
+El catálogo empezó siendo curado —solo obras con varias Wikipedias detrás— y
+dejó de serlo cuando quedó claro lo que eso descartaba. Medido contra Wikidata:
+en nuestros 48 museos existen 182.382 obras y el catálogo curado tenía 6.161,
+un 3,4%. Y lo que faltaba no era basura: era obra real sin foto en Wikimedia
+Commons, que para el arte del siglo XX es sencillamente obra en derechos.
 
-Lo decisivo es *dónde* se aplica el filtro. Va en la fase de enumeración, no
-en la de hidratación: el Louvre tiene 4.692 obras pero solo 149 con 8 o más
-sitelinks. Filtrando al enumerar se hidratan 149 (3 lotes); filtrando después
-habría que hidratar las 4.692 para descartar el 97%.
+Así que ahora se guarda todo y una columna dice qué es visible:
 
-El umbral por defecto está **medido**, no elegido a ojo. Obras alcanzables en
-los museos de la semilla (`npm run estimate` recalcula esta tabla):
+| `artworks.status` | Qué significa |
+|---|---|
+| `published` | Se puede enseñar hoy: tiene imagen, museo y pasa las reglas. |
+| `pending` | Existe y es real, pero le falta algo. Espera en la base. |
+| `rejected` | Está probado que no es una obra de arte. |
 
-| `--min-notability` | Obras | Qué significa |
-|---|---|---|
-| `0` | cientos de miles | Todo, incluida la obra que nadie ha mirado nunca. |
-| `1` | ~10.200 | Al menos una Wikipedia habla de ella. |
-| `2` | **~5.100** | **Por defecto.** El umbral más exigente que sigue llegando al objetivo. |
-| `3` | ~3.600 | |
-| `5` | ~2.200 | Se queda a menos de la mitad del objetivo. |
-| `8` | ~1.200 | Solo obras muy célebres. |
+La distinción entre `pending` y `rejected` es la que hay que defender en cada
+regla nueva: **«le falta un dato» nunca es `rejected`**. Un cuadro del Reina
+Sofía sin imagen espera; solo se rechaza lo que se demuestra que no es una obra
+—una chincheta de Google Maps colada como escultura, un título que quedó sin
+resolver y es una URL—.
 
-Ordenar por notoriedad descendente además hace que, si se corta por `--limit`,
-lo que entre sea lo más conocido y no lo alfabéticamente primero.
+`--min-notability` sigue existiendo y sigue midiéndose con `npm run estimate`,
+pero ya no decide qué entra: decide qué se enumera primero. El barrido completo
+se lanza con `--everything`, que no filtra por notoriedad ni exige imagen.
+
+**Un solo criterio, tres momentos.** Las reglas viven en `audit/rules.ts` como
+funciones puras y las usan el auditor (sobre lo que ya está dentro), la puerta
+de entrada (sobre lo que llega) y `promote` (sobre lo que cambió). Escribir una
+segunda versión de una regla es garantizar que un día digan cosas distintas.
+
+---
+
+## Derechos de autor
+
+Se heredan, no se deducen. Por orden de autoridad:
+
+1. Lo que **declara Wikidata** en `P6216`. Lo dice el 76% de las obras.
+2. La regla de los **70 años** desde la muerte del autor, calculada con el año
+   en curso: el catálogo se libera solo cada 1 de enero.
+3. `unknown`, que se trata como si estuviera en derechos.
+
+Ese orden salió de una equivocación. Deduciendo por fecha de muerte, las 49
+obras "en derechos" del catálogo eran Hopper, Warhol y Chagall… con la imagen
+alojada en Wikimedia Commons, que solo admite contenido libre. La fuente decía
+una cosa y la deducción otra.
+
+De ahí la distinción que gobierna la interfaz: **los derechos de la OBRA y la
+licencia del FICHERO son cosas distintas**, y lo que decide si se puede pintar
+un `<img>` es la segunda. `image_mode()` lo resuelve en SQL —`full`,
+`thumbnail` o `none`— y la web obedece en un solo componente. Cambiar la
+política es cambiar esa función, no repasar la app buscando dónde se pinta una
+imagen.
 
 ---
 
@@ -163,19 +192,35 @@ con el 61% de los títulos en inglés dentro de una columna que parecía españo
 
 ### 1. Base de datos
 
-Crea un proyecto en [Supabase](https://supabase.com) y aplica la migración:
+Crea un proyecto en [Supabase](https://supabase.com), pon la cadena de
+conexión en `DATABASE_URL` (panel: *Connect > Session pooler > URI*) y aplica
+las migraciones:
 
 ```bash
-# Con la CLI de Supabase
-supabase db push
-
-# O pegando supabase/migrations/0001_init.sql en el editor SQL del panel
+cd packages/ingest
+npm run migrate -- --status     # qué hay aplicado y qué falta
+npm run migrate -- --dry-run    # las ejecuta y hace ROLLBACK: ¿funcionarían?
+npm run migrate                 # aplicarlas
 ```
 
-La migración crea el esquema, los índices, la búsqueda full-text con
-tolerancia a acentos, las políticas de seguridad por fila y dos funciones RPC
-(`artworks_near`, `institutions_in_bbox`) que son las consultas que la app
-hará constantemente.
+**Usa el *Session pooler*, no la conexión directa**: `db.<ref>.supabase.co`
+solo resuelve por IPv6 y falla con `ENOTFOUND` en redes sin IPv6.
+
+`supabase db push` no vale aquí: la CLI espera nombres con marca de tiempo y
+lleva su propia cuenta, mientras que estas migraciones van numeradas y las
+primeras se aplicaron a mano. `npm run migrate` lleva su registro en
+`applied_migrations` y nunca reaplica.
+
+El `--dry-run` no es un lujo: `create or replace function` **no puede cambiar
+el tipo de retorno** de una función existente, y como el editor SQL de Supabase
+envuelve el script en una transacción, ese error tumba la migración entera en
+silencio — parece que fue bien y no se aplicó nada. Ensayar lo caza en dos
+segundos.
+
+Las migraciones crean el esquema, los índices (parciales sobre lo publicado),
+la búsqueda full-text con tolerancia a acentos, las políticas de seguridad por
+fila, el modelo de derechos y las funciones RPC que la app usa
+constantemente.
 
 ### 2. Credenciales
 
@@ -237,11 +282,35 @@ npm run ingest -- --help
 ### Comprobaciones
 
 ```bash
-npm run check-db   # ¿se aplicó la migración y conectan las credenciales?
-npm run verify     # ¿siguen respondiendo las APIs como esperamos?
-npm run estimate   # ¿cuántas obras da cada umbral de notoriedad?
-npm run peek       # ¿qué hay en el catálogo ahora mismo?
+npm run check-db     # esquema, credenciales y espacio ocupado
+npm run check-gate   # el clasificador de entrada, sin red ni base de datos
+npm run check-perf   # ¿responden las consultas de la app dentro del límite?
+npm run verify       # ¿siguen respondiendo las APIs como esperamos?
+npm run estimate     # ¿cuántas obras da cada umbral de notoriedad?
+npm run peek         # ¿qué hay en el catálogo ahora mismo?
 ```
+
+`check-perf` usa la **clave anónima**, la misma que el navegador, y no la
+`service_role`. Es deliberado: el rol `anon` tiene `statement_timeout = 3s` y
+la service_role no, así que medir con la cómoda daba todo por bueno mientras la
+web devolvía 500. Existe porque al pasar de 6.000 a 114.000 obras dos consultas
+se rompieron sin que ningún typecheck ni ningún build lo dijera.
+
+`check-gate` no toca la red ni la base: las reglas son funciones puras y los
+casos son defectos que aparecieron de verdad en el catálogo.
+
+### Mantenimiento del catálogo
+
+```bash
+npm run audit -- --images    # audita; las imágenes en pasadas de 800
+npm run promote              # reclasifica lo que ya está dentro
+npm run fill-images          # busca imágenes en la API del museo
+npm run merge-movements      # fusiona movimientos duplicados
+```
+
+**Todas enseñan lo que harían y no escriben** hasta que se les pasa `--apply`.
+Casi todas mueven o borran filas, así que el modo seco es el comportamiento por
+defecto y no una opción.
 
 `verify` llama a las APIs reales, no es un test unitario. Existe para responder
 rápido a "¿esto se ha roto por mi cambio o porque Wikidata cambió algo?", que

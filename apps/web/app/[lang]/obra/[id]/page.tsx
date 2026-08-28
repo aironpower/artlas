@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { isLang, t, type Lang } from '@/lib/i18n';
 import { getArtwork, searchArtworks } from '@/lib/data';
 import { imageUrl } from '@/lib/images';
+import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
+import ArtworkImage from '@/components/ArtworkImage';
 
 export const revalidate = 3600;
 
@@ -43,14 +45,17 @@ export default async function ArtworkPage({ params }: Props) {
     <>
       <article className="detail">
         <div>
-          {work.imageUrl && (
-            <img
-              className="detail-image"
-              src={imageUrl(work.imageUrl, 1280) ?? ''}
-              alt={work.title}
-            />
-          )}
-          {work.imageLicense && (
+          <ArtworkImage
+            className="detail-image"
+            mode={work.imageMode}
+            imageUrl={work.imageUrl}
+            thumbnailUrl={work.thumbnailUrl}
+            originUrl={work.originUrl ?? work.institution?.website ?? null}
+            title={work.title}
+            width={1280}
+            lang={lang}
+          />
+          {work.imageMode === 'full' && work.imageLicense && (
             <p className="small muted" style={{ marginTop: 8 }}>{work.imageLicense}</p>
           )}
         </div>
@@ -60,7 +65,7 @@ export default async function ArtworkPage({ params }: Props) {
 
           {work.artist && (
             <p style={{ fontSize: '1.05rem', margin: '0 0 4px' }}>
-              <Link href={`/${lang}/buscar?artista=${work.artist.slug}`}>
+              <Link href={path(lang, 'artist', work.artist.slug)}>
                 {work.artist.name}
               </Link>
               {work.artist.birthYear && (
@@ -77,7 +82,7 @@ export default async function ArtworkPage({ params }: Props) {
             <ul className="chips">
               {work.movements.map((m: { id: number; slug: string; name: string }) => (
                 <li key={m.id}>
-                  <Link href={`/${lang}/buscar?mov=${m.slug}`} className="chip">{m.name}</Link>
+                  <Link href={`${path(lang, 'search')}?mov=${m.slug}`} className="chip">{m.name}</Link>
                 </li>
               ))}
             </ul>
@@ -94,7 +99,7 @@ export default async function ArtworkPage({ params }: Props) {
               <li>
                 <span className="k">{t(lang, 'inMuseum')}</span>
                 <span>
-                  <Link href={`/${lang}/museo/${work.institution.slug}`}>
+                  <Link href={path(lang, 'museum', work.institution.slug)}>
                     {work.institution.name}
                   </Link>
                   <br />

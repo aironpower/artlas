@@ -57,7 +57,32 @@ export function imageUrl(raw: string | null, width: ThumbWidth = 500): string | 
 
   const hash = createHash('md5').update(filename).digest('hex');
   const encoded = encodeURIComponent(filename);
+  const dir = `${hash[0]}/${hash.slice(0, 2)}/${encoded}`;
 
-  return 'https://upload.wikimedia.org/wikipedia/commons/thumb/' +
-         `${hash[0]}/${hash.slice(0, 2)}/${encoded}/${width}px-${encoded}`;
+  return `https://upload.wikimedia.org/wikipedia/commons/thumb/${dir}/${thumbName(filename, width, encoded)}`;
+}
+
+/**
+ * Nombre del fichero de miniatura, que NO es `<ancho>px-<nombre>` para todos
+ * los formatos.
+ *
+ * Commons no puede servir un TIFF ni un SVG a un navegador, así que los
+ * rasteriza, y el resultado lleva otro nombre y otra extensión. Dar por bueno
+ * el patrón de siempre devolvía un 400 con `content-type: text/html`, que en la
+ * página se ve como una obra sin imagen. Eran 86 obras del catálogo, casi todas
+ * del Nationalmuseum sueco, que publica sus fondos en TIFF.
+ *
+ * Comprobado contra upload.wikimedia.org: para un `.tif`, `lossy-page1-500px-
+ * <nombre>.jpg` devuelve un JPEG de 30 KB donde `500px-<nombre>` devuelve 400.
+ * El PNG también existe pero pesa siete veces más, así que para fotografía de
+ * cuadros se prefiere el JPEG; para SVG, que es dibujo plano, al revés.
+ */
+function thumbName(filename: string, width: ThumbWidth, encoded: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+
+  if (ext === 'tif' || ext === 'tiff') return `lossy-page1-${width}px-${encoded}.jpg`;
+  if (ext === 'svg') return `${width}px-${encoded}.png`;
+  if (ext === 'pdf' || ext === 'djvu') return `page1-${width}px-${encoded}.jpg`;
+
+  return `${width}px-${encoded}`;
 }

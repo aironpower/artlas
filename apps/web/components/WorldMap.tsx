@@ -19,6 +19,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { MapPin } from '@/lib/data';
 import type { Lang } from '@/lib/i18n';
 import { formatNumber, t } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 
 interface Props {
   pins: MapPin[];
@@ -105,7 +106,7 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
           `${formatNumber(lang, pin.artwork_count)} ${t(lang, 'artworks')}</span>`,
         );
 
-      el.addEventListener('click', () => navigate.current(`/${lang}/museo/${pin.slug}`));
+      el.addEventListener('click', () => navigate.current(path(lang, 'museum', pin.slug)));
 
       return new maplibregl.Marker({ element: el })
         .setLngLat([pin.lng, pin.lat])

@@ -43,6 +43,17 @@ function parseArgs(argv: string[]): Args {
       case '--all':
         args.museums = undefined;
         break;
+      /*
+       * El barrido completo: todo lo que exista, con imagen o sin ella. Es lo
+       * que llena la sala de espera —las 182.000 obras medidas frente a las
+       * 6.000 que teníamos— y por eso es una bandera explícita y no el valor
+       * por defecto: multiplica por treinta el tiempo de ingesta.
+       */
+      case '--everything':
+        args.options.minNotability = 0;
+        args.options.requireImage = false;
+        args.options.limitPerMuseum = 100000;
+        break;
       case '--min-notability':
         args.options.minNotability = Number(next());
         break;
@@ -83,6 +94,9 @@ Opciones
       --min-notability <n>  Mínimo de enlaces a Wikipedia. Por defecto ${DEFAULT_OPTIONS.minNotability}.
                             0 = todo (cientos de miles); 5 = catálogo curado;
                             15 = solo obras muy célebres.
+      --everything          Todo lo que exista: sin umbral de notoriedad y
+                            también las obras sin imagen, que se guardan
+                            esperando datos. Multiplica por ~30 el tiempo.
       --limit <n>           Máximo de obras por museo. Por defecto ${DEFAULT_OPTIONS.limitPerMuseum}.
       --batch-size <n>      Filas por escritura. Por defecto ${DEFAULT_OPTIONS.batchSize}.
       --no-enrich           No consultar las APIs propias de los museos
@@ -107,6 +121,45 @@ async function loadSeed(): Promise<MuseumSeed[]> {
     throw new Error(
       'No se encuentra data/museums.seed.json. Genéralo con: npx tsx src/build-seed.ts',
     );
+  }
+}
+
+/**
+ * Rehace las estadísticas del planificador.
+ *
+ * Después de escribir 100.000 filas, Postgres sigue planificando como si la
+ * tabla tuviera 6.000 hasta que autovacuum se entera, y mientras tanto elige
+ * planes malos: la ficha de museo pasó a agotar el tiempo y "obras cerca de
+ * mí" tardaba 1,5 s donde tarda 0,6. Un ANALYZE lo corrige en segundos.
+ *
+ * Va aquí y no en una herramienta aparte porque quien ensucia las estadísticas
+ * es esta ingesta: dejarlo para que alguien se acuerde de ejecutarlo es dejar
+ * la app lenta hasta que un usuario se queje.
+ *
+ * Necesita DATABASE_URL (conexión directa); PostgREST no ejecuta ANALYZE. Si no
+ * está configurada se avisa y no se falla: la ingesta ya ha terminado bien.
+ */
+async function analyzeTables(): Promise<void> {
+  const url = process.env.DATABASE_URL;
+
+  if (!url) {
+    console.log('  (sin DATABASE_URL: no se han rehecho las estadísticas del planificador)');
+    return;
+  }
+
+  const { default: pg } = await import('pg');
+  const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+
+  try {
+    await client.connect();
+    console.log('Rehaciendo estadísticas del planificador…');
+    for (const table of ['artworks', 'artwork_translations', 'artists', 'artist_translations']) {
+      await client.query(`analyze ${table}`);
+    }
+  } catch (err) {
+    console.warn(`  (no se pudieron rehacer: ${(err as Error).message})`);
+  } finally {
+    await client.end().catch(() => { /* ya cerrada */ });
   }
 }
 
@@ -148,6 +201,7 @@ async function main() {
   if (db && stats.inserted > 0) {
     console.log('\nRecalculando contadores…');
     await refreshCounters(db);
+    await analyzeTables();
   }
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(0);
@@ -156,10 +210,20 @@ async function main() {
 ──────────────────────────────────────────
   Descargadas   ${stats.fetched}
   Escritas      ${stats.inserted}
+  Publicadas    ${stats.published}
+  Esperando     ${stats.pending}
+  No son obras  ${stats.rejected}
   Duplicadas    ${stats.skipped}
+  Corregidas    ${stats.repaired}
   Errores       ${stats.errors}
   Tiempo        ${elapsed}s
 ──────────────────────────────────────────`);
+
+  if (stats.pending > 0) {
+    console.log(`  ${stats.pending} obras guardadas esperando datos. No se ven en la app todavía.`);
+    console.log('  Cuando les llegue imagen o entren en dominio público, `npm run promote` las publica.');
+    console.log();
+  }
 
   if (stats.errors > 0) process.exitCode = 1;
 }

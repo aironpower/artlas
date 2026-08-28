@@ -1,123 +1,276 @@
 # Notas de trabajo
 
-Estado al cerrar la sesión del 27 de agosto de 2026 y lo siguiente a hacer.
+Estado al 28 de agosto de 2026 y lo siguiente a hacer.
 
 ---
 
 ## Dónde nos quedamos
 
-Funcionando y verificado contra datos reales:
+El catálogo pasó de **6.161 obras a 113.783** en un barrido de 9 h 36 min sobre
+los 48 museos. Lo que cambió no fue solo el tamaño: cambió la idea. Antes se
+descartaba lo que no se podía enseñar; ahora se guarda todo y una columna dice
+qué es visible.
 
-- Esquema en Supabase con las migraciones `0001`, `0002` (multilingüe) y `0003`
-  (corrección del bbox del mapa) aplicadas.
-- Ingesta multilingüe de 48 museos en 7 idiomas.
-- App web en `apps/web`: mapa mundial, buscador con filtros, fichas de obra y
-  de museo, "obras cerca de mí". `npm run build && npm start` en esa carpeta.
+| | |
+|---|---|
+| Obras en total | ~124.600 |
+| Publicadas (visibles en la app) | ~62.000 |
+| Esperando datos | ~62.000 |
+| Rechazadas (no son obras) | 2 |
+| Espacio | ~160 MB de los 500 del plan gratuito |
+| Idiomas | es, en, fr (eran 7; se recortó por espacio) |
 
-Catálogo en el último recuento: ~5.000 obras, ~21.000 traducciones,
-1.100 artistas, 145 movimientos.
+Migraciones `0001`–`0022`. **Ya no se aplican a mano**: `npm run migrate`.
+Quedan DOS sin aplicar, `0017` y `0021`, y el motivo está más abajo.
 
-### Comprobar antes de nada al retomar
+Hay además un **panel de revisión** en `/[lang]/admin`, con acceso por enlace
+al correo. `manuel@softie.dev` ya es administrador.
+
+### LO PRIMERO AL RETOMAR: hay una ingesta a medias
+
+Quedó corriendo el barrido `--all --everything` y se atascó en el **Met**, que
+enriquece obra a obra contra su API: 7,3 obras/min frente a las 172 de un museo
+sin API. Le quedaban unas 17 horas.
+
+Intenté cortarlo y **no pude**: el agente tiene bloqueado terminar procesos. El
+proceso es el **pid 5724** (`node --require ... cli.ts`). Matarlo desde el
+Administrador de tareas es seguro — los checkpoints hacen que no se pierda nada.
+
+**Ya está arreglada la causa** (enriquecimiento por lotes y solo para lo que le
+falta algo), así que al relanzar irá mucho más rápido. Pasos, en este orden:
 
 ```bash
 cd packages/ingest
-npm run check-db        # esquema y credenciales
-npm run verify          # ¿siguen respondiendo Wikidata, Met y AIC?
-npm run peek            # qué hay en el catálogo
+
+# 1. Comprobar que no queda ninguna ingesta viva antes de tocar la base
+#    (aplicar migraciones o fusionar movimientos con una ingesta corriendo
+#     ya tumbó tres museos; ver los tropiezos)
+
+# 2. Las dos migraciones que faltan, que tocan `artworks` y por eso esperaban
+npm run migrate -- --dry-run
+npm run migrate
+
+# 3. Los movimientos, que la ingesta vieja pudo volver a duplicar
+npm run merge-movements            # enseña qué haría
+npm run merge-movements -- --apply
+
+# 4. Los museos que quedaron a medias: Met, Viena, Bélgica y Filadelfia.
+#    Los tres últimos cayeron por fusionar movimientos con la ingesta viva.
+npm run start -- --all --everything
+
+# 5. Ahora sí, las imágenes que faltan
+npm run fill-images                # en seco: cuántas encontraría
+npm run fill-images -- --apply
+npm run promote -- --apply         # publica las que ya cumplen
+
+# 6. Y volver a auditar, que la última pasada es de cuando había 6.460 obras
+npm run audit -- --images
 ```
 
-La ingesta de los 48 museos estaba en el museo 45 al cerrar. Si no llegó al
-final, basta con relanzarla: los checkpoints saltan lo ya hecho.
+### Comprobar al retomar
 
 ```bash
-npm run start -- --all
+cd packages/ingest
+npm run migrate -- --status   # ¿hay migraciones sin aplicar?
+npm run check-db              # esquema, credenciales y espacio ocupado
+npm run check-gate            # el clasificador de entrada, sin red ni base
+npm run check-perf            # ¿responden las consultas de la app? (clave anon)
+npm run peek                  # qué hay en el catálogo
 ```
+
+Requiere **Node 22**. Si `node -v` dice 16, es el del PATH de Windows; el bueno
+está en `%APPDATA%/nvm/v22.12.0`.
 
 ---
 
-## Lo siguiente: mapa de las obras de un pintor
+## Las tres ideas que sostienen el diseño
 
-Pedido explícitamente: poder ver **el mapa de los cuadros de un pintor
-concreto**, con **cada obra como una chincheta separada**, no agrupadas en una
-bola.
+**1. Guardar todo, mostrar lo que se pueda.** `artworks.status` vale
+`published`, `pending` o `rejected`. La distinción que hay que defender en cada
+regla nueva: *«le falta un dato» nunca es `rejected`*. Una obra sin imagen
+espera; solo se rechaza lo que está probado que no es una obra de arte.
 
-### El problema real, que no es de interfaz
+**2. Un solo criterio, tres momentos.** Las reglas de `audit/rules.ts` son
+funciones puras y las usan el auditor (sobre lo que ya está dentro), la puerta
+de entrada (sobre lo que llega) y `promote` (sobre lo que cambió). Escribir una
+segunda versión de una regla es garantizar que un día digan cosas distintas.
 
-Todas las obras de un museo tienen **exactamente las mismas coordenadas**. No
-es un defecto de los datos: `artworks.location` es una copia deliberada del
-punto del museo (ver el comentario en `0001_init.sql`), porque el mapa filtra
-por bbox y un join a `institutions` por tesela sería el cuello de botella.
+**3. Los derechos se heredan, no se deducen.** Por orden: lo que declara
+Wikidata en `P6216` (lo dice el 76% de las obras), luego la regla de los 70
+años desde la muerte del autor, y si no, `unknown`, que se trata como en
+derechos. El orden viene de una equivocación: deduciendo por fecha de muerte,
+las 49 obras "en derechos" del catálogo eran Hopper, Warhol y Chagall… con la
+imagen alojada en Commons, que solo admite contenido libre.
 
-Consecuencia: las 30 obras de Picasso en el Reina Sofía son 30 puntos
-idénticos. Cualquier mapa por obra los pinta uno encima de otro y se ve una
-sola chincheta. Separarlos no se arregla con CSS ni con un clustering
-distinto — hay que decidir **qué posición se le da a cada obra**.
+Y una distinción que costó ver: **los derechos de la OBRA y la licencia del
+FICHERO son cosas distintas**. Lo que decide si se puede pintar un `<img>` es
+la segunda. `image_mode()` mira primero dónde está alojada la imagen.
 
-Wikidata no tiene coordenadas de sala. Las APIs del Met y de AIC sí dan la sala
-(`Gallery 822`, `Gallery 241`) pero solo como texto, sin geometría.
+---
 
-### Opciones a valorar
+## Herramientas
 
-**A. Abanico al acercar el zoom (spiderfy).** Cuando N obras comparten punto,
-se despliegan en círculo o espiral alrededor del museo, con líneas hacia el
-centro. Es el patrón conocido de Leaflet.MarkerCluster; en MapLibre hay que
-implementarlo a mano. Da lo pedido —cada obra por separado— a cambio de que las
-posiciones sean simbólicas, no reales. **Es la que recomendaría**, siendo
-explícitos en la interfaz de que el abanico es una forma de mostrar, no una
-ubicación.
+| Comando | Para qué |
+|---|---|
+| `npm run migrate` | Aplica migraciones. `--dry-run` las ejecuta y hace ROLLBACK. |
+| `npm run start -- --all --everything` | Barrido completo (~10 h, reanudable). |
+| `npm run audit -- --images` | Audita el catálogo. Imágenes en pasadas de 800. |
+| `npm run promote` | Reclasifica lo que ya está dentro. |
+| `npm run fill-images` | Busca imágenes en la API del museo. |
+| `npm run merge-movements` | Fusiona movimientos duplicados. |
+| `npm run check-*` | Comprobaciones. |
 
-**B. Desplazamiento determinista.** Mover cada obra unos metros según su id.
-Trivial de implementar, pero coloca cuadros en la calle de al lado del museo y
-un usuario que mire de cerca verá algo simplemente falso. Descartable.
+**Todas escriben solo con `--apply`** (o aplican solo sin `--dry-run`, en el
+caso de `migrate`). Es deliberado: casi todas mueven o borran filas.
 
-**C. Dos niveles.** El mapa muestra museos dimensionados por cuántas obras de
-ESE pintor tienen, y al pulsar se abre la rejilla de esas obras. Es lo más
-honesto con los datos, pero no es lo que se ha pedido.
+---
 
-**D. Coordenadas de sala.** Requiere geometría de interiores que no está en
-ninguna de nuestras fuentes. No viable ahora.
+## Lo siguiente, en orden
 
-### Trabajo que hace falta
+**1. Imágenes desde las APIs de los museos.** De las ~62.000 que esperan,
+**todas esperan por lo mismo** (`image_missing`) y unas 22.500 están en dominio
+público. No es arte del siglo XX inaccesible: son obras libres sin foto en
+Commons, que sus museos sí publican.
 
-1. **Ruta** `/[lang]/artista/[slug]` con mapa + rejilla. Los enlaces de autor
-   de las fichas apuntan hoy a `/buscar?artista=…`; pasarían aquí.
-2. **RPC nueva**, algo como `artworks_by_artist(p_slug, p_lang)`: la actual
-   `search_artworks` filtra por artista pero **no devuelve lat/lng**, así que
-   no sirve para pintar un mapa.
-3. **Componente de mapa por obra**, con el abanico de la opción A. Conviene que
-   sea distinto de `WorldMap` (que agrupa por museo) en vez de llenar ese de
-   condicionales.
-4. **Encuadre automático** al bbox de las obras del pintor: un pintor con obra
-   en Madrid y Nueva York necesita zoom mundial; uno con todo en Florencia, no.
+El conector del Nationalmuseum (23.214 esperando, un tercio del total) está
+escrito y sin ejecutar: `npm run fill-images`. Cruza por número de inventario,
+no por título — sus títulos están en sueco y los nuestros en inglés. Siguientes
+candidatos por obras que desbloquean: National Gallery of Victoria (5.227),
+Hermitage (4.601, sin API abierta), National Gallery of Canada (3.841), Harvard
+(3.492, **ya tenemos conector**), SMK (2.063, API abierta y probada), Prado
+(2.445, de los que 2.268 en dominio público).
+
+**2. Los 198 artistas con nombre-URL que siguen dentro.** La puerta impide que
+entren nuevos, pero los viejos siguen ahí: 198 fichas mostrando
+`http://www.wikidata.org/.well-known/genid/…` donde va el pintor, y el contador
+de artistas de la portada inflado. Es un `UPDATE` y un borrado; borra filas, así
+que hay que preguntar antes.
+
+**3. Las ~60.000 imágenes sin verificar**, en pasadas incrementales de 800
+(`npm run audit -- --images`).
+
+**4. Terminar el panel.** Ya hay bandeja de hallazgos con confirmar y descartar.
+Falta: alta manual de obras, y publicar o retirar una obra a mano (que necesita
+su política de escritura sobre `artworks`, con `status_locked` para que la
+ingesta no pise la decisión).
+
+**5. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
+desde Wikidata aunque ya las tengamos idénticas. Saltarse los QID ya conocidos
+haría que añadir museos nuevos costara solo lo nuevo. Es lo que más rendiría de
+cara a seguir metiendo museos.
+
+**6. Rotar la contraseña de la base**, que pasó por una conversación.
+
+---
+
+## Ya hecho en la sesión del 28 (por si se busca)
+
+- Migraciones `0011`–`0022`: identidades mezcladas, camino rápido del buscador,
+  `artworks_near` usando su índice, `SECURITY DEFINER`, buscador por UNION,
+  derechos en las RPC, `profiles` con rol, y revisión de hallazgos.
+- **Panel de revisión** en `/[lang]/admin`: acceso por enlace al correo,
+  bandeja de hallazgos, confirmar y descartar.
+- **Los derechos en la interfaz**: un solo componente (`ArtworkImage`) que
+  obedece a `image_mode`, con las tres ramas probadas.
+- **Optimización de la ingesta**: el enriquecimiento pasa a lotes concurrentes y
+  solo para obras a las que les falta algo. Era 24 veces más lento que la
+  ingesta sin enriquecer y era el cuello de botella de todo.
+- `npm run migrate` con `--dry-run`, `--only` y `--seed`.
+
+---
+
+## Europeana: comprobado que NO sirve para esto
+
+Era el plan para el arte en derechos y **no tiene las obras**:
+
+```
+  "Guernica" / Picasso:              0 resultados con imagen
+  "Nighthawks" / Hopper:             0
+  "Persistence of Memory" / Dalí:    0
+  "Whaam!" / Lichtenstein:           0
+  Warhol en TODA Europeana:         10 imágenes
+```
+
+Tiene 36 millones de imágenes, pero su fuerza son bibliotecas, archivos e
+instituciones pequeñas. Los grandes museos de arte no ceden a agregadores sus
+imágenes en derechos. De nuestros 48 museos, aparecen 2 y con 4 y 3 registros.
+
+Sigue sirviendo para instituciones pequeñas. No para esto.
 
 ---
 
 ## Otras cosas pendientes
 
-- **Valoraciones de usuarios.** Las tablas (`artwork_ratings`,
-  `institution_ratings`, `favorites`) están creadas con sus políticas RLS desde
-  `0001`, pero no hay ni login ni interfaz. Falta Supabase Auth en la web.
-- **Los 2 museos que faltan en la semilla.** Se corrigió el bug de resolución
-  de nombres de una sola palabra (Rijksmuseum, Mauritshuis quedaban fuera) pero
-  la semilla se generó antes del arreglo. Regenerar con `npm run seed` y volver
-  a lanzar la ingesta: los checkpoints saltan los ya hechos.
+- **Valoraciones de usuarios.** Tablas y RLS desde `0001`; falta Supabase Auth
+  y la interfaz.
 - **La técnica sale como soporte.** Wikidata usa `P186` (material), que da
-  "lienzo" o "tabla" en vez de "óleo sobre lienzo". Solo el Met, AIC y Harvard
-  tienen API propia con la técnica bien catalogada; los otros 45 museos se
-  quedan con el soporte. Habría que buscar otra propiedad o derivarlo.
-- **Chinchetas solapadas en el mapa mundial.** En París el Louvre y Orsay casi
-  coinciden al alejar el zoom. Se mitigó dibujando los museos grandes encima,
-  pero es el mismo problema de fondo que el mapa por pintor.
+  "lienzo" en vez de "óleo sobre lienzo".
+- **La licencia concreta de cada fichero de Commons.** Hoy se guarda
+  "Wikimedia Commons" a secas. Traer la licencia real son ~3.650 peticiones a
+  su API; solo cambia la línea de atribución.
+- **Los 4 idiomas retirados** (it, de, pt, nl). Los textos de interfaz y los
+  segmentos de URL siguen escritos: reactivarlos es añadirlos a `LANGS`,
+  `LANG_NAMES`, `SEGMENTS` y `LANGUAGES`, y reingerir. Lo que no cabía en 500 MB
+  eran sus traducciones de catálogo.
+- **`apps/web/tsconfig.tsbuildinfo` está versionado** y cambia en cada build.
 
 ---
 
-## Dos tropiezos de método, para no repetirlos
+## Tropiezos de método, para no repetirlos
 
-**Borrar `.next` entre builds.** Estuve un buen rato convencido de que el mapa
-seguía roto cuando ya estaba arreglado: `next build` reutilizaba las páginas
-prerenderizadas y yo miraba datos viejos. Con `rm -rf .next` apareció todo
-correcto a la primera.
+**`create or replace function` NO puede cambiar el tipo de retorno.** Postgres
+aborta con `cannot change return type of existing function` y, como el editor
+SQL de Supabase envuelve el script en una transacción, **tumba la migración
+entera en silencio**: parece que fue bien y no se ha aplicado nada. Si una
+migración cambia la firma de una función, `drop function if exists` antes. Con
+`npm run migrate -- --dry-run` esto se caza en dos segundos.
 
-**No lanzar procesos largos en paralelo sobre el mismo fichero.** Tuve dos
-generaciones de `museums.seed.json` corriendo a la vez. Salió bien porque la
-correcta terminó la última, pero fue casualidad.
+**No tocar el catálogo con una ingesta viva.** Fusioné movimientos mientras
+corría una ingesta; el proceso tenía en caché el id de un movimiento que borré
+y un museo entero se cayó con un fallo de clave foránea.
+
+**Medir por el camino del usuario, no por el cómodo.** Dos veces el mismo
+error. La sonda de imágenes pedía la URL original en vez de la miniatura que
+pide el navegador; y la de rendimiento medía con `service_role`, que no tiene
+el `statement_timeout = 3s` del rol `anon` — daba todo por bueno mientras la
+web devolvía 500.
+
+**Un 429 no es un error de datos.** Le metí 150 peticiones seguidas a Commons,
+me devolvió 429 en 126 y estuve a punto de dar por rotas casi todas las
+imágenes del catálogo.
+
+**No compilar mientras otro servidor sirve ese mismo `.next`.** Llegué a
+concluir en voz alta que las URLs traducidas rompían la portada. Era un
+`next start` de otra terminal leyendo el `.next` que yo borraba.
+
+**Un `--dry-run` no debe escribir nada, ni siquiera un checkpoint.** El
+simulacro marcaba el museo como hecho y la siguiente ejecución real se lo
+saltaba, dejándolo fuera del catálogo sin avisar.
+
+**Los índices parciales solo se usan si la consulta nombra su condición.** Al
+hacerlos parciales sobre `status = 'published'`, las funciones que no
+mencionaban `status` dejaron de usarlos: "cerca de mí" pasó de 0,6 a 8
+segundos. Y con RLS activo hay un segundo efecto — la política se aplica antes
+que las condiciones no *leakproof* como `st_dwithin`, lo que descarta el índice
+geográfico. De ahí el `SECURITY DEFINER` de `0014`, cuyo precio es que **la
+garantía de visibilidad pasa a ser el `where status = 'published'` escrito
+dentro de cada función**. Quien lo borre por parecerle redundante publicará las
+59.000 obras que esperan.
+
+**Un caso no es una fuente.** Di por bueno que Europeana tenía el arte del
+siglo XX porque existía una miniatura de Picasso. Tenía 10 imágenes de Warhol
+en total.
+
+**No se puede medir una API mientras otro proceso la está usando.** Intenté
+medir el tamaño óptimo de lote contra WDQS con la ingesta corriendo: 50 obras
+en 20 s, 200 en 21 s, y una repetición en 139 ms por caché. Números sin sentido.
+Las mediciones de red se hacen con la máquina en reposo.
+
+**El agente no puede terminar procesos.** Está bloqueado, así que una ingesta
+lanzada en segundo plano no se puede cortar desde aquí ni con `TaskStop` —el
+proceso hijo sobrevive—. Si hay que pararla, es cosa del Administrador de
+tareas. Conviene tenerlo en cuenta ANTES de lanzar algo de nueve horas.
+
+**`ANALYZE` después de una ingesta grande.** Tras meter 100.000 filas, Postgres
+seguía planificando como si la tabla tuviera 6.000. Ahora lo hace la propia
+ingesta al terminar, porque es ella quien ensucia las estadísticas.

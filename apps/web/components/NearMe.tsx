@@ -12,6 +12,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { NearbyArtwork } from '@/lib/data';
 import { formatDistance, t, type Lang } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 
 type State =
   | { status: 'idle' }
@@ -61,7 +62,7 @@ export default function NearMe({ lang }: { lang: Lang }) {
               <h2>{t(lang, 'nearMe')}</h2>
               <div className="grid">
                 {state.works.slice(0, 8).map((w) => (
-                  <Link key={w.id} href={`/${lang}/obra/${w.id}`} className="card">
+                  <Link key={w.id} href={path(lang, 'artwork', w.id)} className="card">
                     <img className="card-image" src={w.image_url ?? ''} alt={w.title} loading="lazy" />
                     <p className="card-title">{w.title}</p>
                     <p className="card-meta">{w.artist_name}</p>

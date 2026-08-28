@@ -339,8 +339,9 @@ async function hydrateScalars(qids: string[]): Promise<Row[]> {
     SELECT ?work ?workLabel ?class ?sitelinks ?image
            ?creator ?creatorLabel ?birth ?death ?nationalityLabel
            ?inception ?earliest ?latest ?height ?width
-           ?material ?materialLabel ?genre ?genreLabel
+           ?material ?materialLabel ?genre ?genreLabel ?inventory
            (GROUP_CONCAT(DISTINCT ?movementQid; separator="|") AS ?movements)
+           (GROUP_CONCAT(DISTINCT ?copyrightQid; separator="|") AS ?copyrights)
     WHERE {
       VALUES ?work { ${values} }
       ?work wdt:P31 ?class .
@@ -369,12 +370,27 @@ async function hydrateScalars(qids: string[]): Promise<Row[]> {
         BIND(STRAFTER(STR(?movement), "entity/") AS ?movementQid)
       }
 
+      # P6216: lo que Wikidata AFIRMA sobre los derechos de la obra, en vez de
+      # lo que nosotros dedujéramos de la fecha de muerte del autor. Medido
+      # sobre Prado, MoMA, Reina Sofía y Met: lo declaran 8.797 de 11.541 obras
+      # (76%) y solo con dos valores, Q19652 y Q50423863.
+      OPTIONAL {
+        ?work wdt:P6216 ?copyright .
+        BIND(STRAFTER(STR(?copyright), "entity/") AS ?copyrightQid)
+      }
+
+      # P217: el número de inventario del museo. Es la ÚNICA clave con la que
+      # se puede cruzar una obra con la API de su museo, porque los títulos no
+      # coinciden — el Nationalmuseum cataloga en sueco y nosotros guardamos la
+      # etiqueta inglesa de Wikidata.
+      OPTIONAL { ?work wdt:P217 ?inventory }
+
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en,es". }
     }
     GROUP BY ?work ?workLabel ?class ?sitelinks ?image
              ?creator ?creatorLabel ?birth ?death ?nationalityLabel
              ?inception ?earliest ?latest ?height ?width
-             ?material ?materialLabel ?genre ?genreLabel`,
+             ?material ?materialLabel ?genre ?genreLabel ?inventory`,
     `escalares ${qids.length}`);
 }
 
@@ -565,6 +581,8 @@ function toCanonical(
 
     imageUrl: val(row, 'image'),
     imageLicense: 'Wikimedia Commons',
+    copyrightStatus: readCopyright(val(row, 'copyrights')),
+    inventoryNumber: val(row, 'inventory'),
 
     source: 'wikidata',
     sourceId: workQid,
@@ -573,6 +591,32 @@ function toCanonical(
     notability: num(val(row, 'sitelinks')) ?? 0,
     description: val(row, 'workDescription'),
   };
+}
+
+/*
+ * Los dos únicos valores de P6216 que aparecen en nuestros museos. Comprobado
+ * contra WDQS antes de escribirlos aquí, en vez de copiarlos de la
+ * documentación: la lista completa de la propiedad tiene una docena de valores
+ * y casi ninguno se usa en obra de museo.
+ */
+const PUBLIC_DOMAIN_QID = 'Q19652';
+const COPYRIGHTED_QID = 'Q50423863';
+
+/**
+ * Lee la declaración de derechos de Wikidata.
+ *
+ * Una obra puede declarar varios estados a la vez, porque P6216 se cualifica
+ * por jurisdicción: algo puede estar en dominio público en Estados Unidos y
+ * bajo derechos en la UE. No leemos el cualificador, así que ante un conflicto
+ * se elige lo restrictivo. Equivocarse hacia "no lo enseñes" oculta una obra;
+ * equivocarse al revés la publica sin derecho a hacerlo.
+ */
+function readCopyright(raw: string | undefined): 'public_domain' | 'in_copyright' | undefined {
+  const qids = (raw ?? '').split('|').filter(Boolean);
+
+  if (qids.includes(COPYRIGHTED_QID)) return 'in_copyright';
+  if (qids.includes(PUBLIC_DOMAIN_QID)) return 'public_domain';
+  return undefined;
 }
 
 /**

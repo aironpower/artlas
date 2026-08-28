@@ -11,7 +11,17 @@ export type Source = 'wikidata' | 'aic' | 'met' | 'harvard' | 'europeana' | 'man
  * Idiomas del catálogo. Deben coincidir con la tabla `languages` de la base
  * de datos, que es la que mapea cada código a su diccionario de Postgres.
  */
-export const LANGUAGES = ['es', 'en', 'fr', 'it', 'de', 'pt', 'nl'] as const;
+/*
+ * Tres idiomas, no siete, y es una decisión de espacio, no de producto.
+ *
+ * Cada obra genera una fila de traducción por idioma, con su vector de
+ * búsqueda. Amasar 182.000 obras por siete idiomas son 1,3 millones de filas y
+ * no caben en los 500 MB del plan gratuito de Supabase. Con tres caben.
+ *
+ * Los textos de interfaz de los otros cuatro siguen escritos en la web: volver
+ * a activarlos es añadirlos aquí y reingerir, no traducir de nuevo.
+ */
+export const LANGUAGES = ['es', 'en', 'fr'] as const;
 export type Lang = (typeof LANGUAGES)[number];
 
 /**
@@ -93,6 +103,19 @@ export interface CanonicalArtwork {
   iiifBase?: string;
   imageLicense?: string;
 
+  /*
+   * Lo que la FUENTE declara sobre los derechos (Wikidata P6216), no lo que
+   * nosotros deduzcamos. `undefined` significa que no lo dice, y entonces sí
+   * hay que deducirlo de la fecha de muerte del autor.
+   */
+  copyrightStatus?: 'public_domain' | 'in_copyright';
+
+  /**
+   * Número de inventario del museo (Wikidata P217): "NMB 1723".
+   * Es la clave con la que se cruza la obra con la API de su museo.
+   */
+  inventoryNumber?: string;
+
   source: Source;
   sourceId: string;
   sourceUrl?: string;
@@ -116,4 +139,12 @@ export interface IngestStats {
   updated: number;
   skipped: number;
   errors: number;
+  /** Guardadas y visibles en la app. */
+  published: number;
+  /** Guardadas, esperando el dato que les falta. */
+  pending: number;
+  /** Guardadas como "no es una obra de arte". */
+  rejected: number;
+  /** Obras que entraron con algún dato corregido. */
+  repaired: number;
 }

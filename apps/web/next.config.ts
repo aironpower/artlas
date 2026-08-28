@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
+import { localizedRoutes } from './lib/routes';
 
 /*
  * Las credenciales viven en el .env de la RAÍZ del monorepo, compartido con la
@@ -29,9 +30,28 @@ try {
  * unas variables que sí están cargadas.
  */
 const config: NextConfig = {
+  /*
+   * URLs traducidas. Las carpetas de `app/[lang]/` se llaman en español —el
+   * idioma por defecto— y estas reescrituras hacen que `/en/artwork/1973` sirva
+   * la carpeta `obra` sin que el usuario vea una palabra en español en la barra
+   * de direcciones. El mapa de segmentos vive en `lib/routes.ts` y lo usan tanto
+   * esto como los enlaces de la app, para que no puedan discrepar.
+   *
+   * Las rutas en español siguen funcionando en cualquier idioma; no se
+   * redirigen. Un enlace viejo o compartido no debe romperse por un cambio de
+   * cosmética en la URL.
+   */
+  async rewrites() {
+    return localizedRoutes().map(({ lang, segment, canonical }) => ({
+      source: `/${lang}/${segment}/:rest*`,
+      destination: `/${lang}/${canonical}/:rest*`,
+    }));
+  },
+
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? '',
   },
 
   // Las imágenes vienen de Commons y de las APIs de los museos. Se listan los
