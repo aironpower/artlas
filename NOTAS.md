@@ -136,6 +136,33 @@ es de pago.
 
 ---
 
+## Lo hecho en la web el 28 de agosto (tarde)
+
+**Paginación en museo, artista y buscador.** El catálogo estaba invisible
+detrás de un tope de 60: el Prado enseñaba 60 obras de sus 3.990 y no había
+manera de ver la 61, y la ficha de artista hacía lo contrario, volcar 374 de
+golpe —215.863 píxeles de alto en un móvil, ahora 21.921—. Migraciones 0023
+(`p_offset` y `artworks_by_institution`), 0024 (el índice) y 0025 (paginar en
+dos pasos, tras un 500 en producción en la primera visita a cada página
+profunda). 36 obras por página; enlaces de verdad, no botones, así que la
+página vive en la URL y se indexa.
+
+Lo que queda de aquel repaso visual, por orden de lo que más chirría:
+
+1. **La ficha de obra muere en un vacío** y no ofrece a dónde seguir: ni más
+   obras del mismo museo, ni del mismo artista. En una ventana de 900 px de
+   alto, Guernica ocupa 588 y el pie flota a media página.
+2. **La tarjeta es enorme en móvil**: 580 px cada una, una sola columna. Las
+   páginas siguen midiendo 21.000 px por eso, no por el número de obras.
+3. **La cabecera repite el buscador grande** en todas las páginas, incluso
+   dentro de una obra.
+4. **Los títulos arrastran ruido de Wikidata**: «El columpio (Goya)», con el
+   pintor repetido justo debajo.
+5. **Las transiciones entre vistas**, que era lo que Manuel pedía junto al
+   estilo: View Transitions, esqueletos de carga y precarga al pasar el ratón.
+
+---
+
 ## Lo siguiente, en orden
 
 **1. Imágenes desde las APIs de los museos.** De las ~62.000 que esperan,
