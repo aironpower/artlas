@@ -119,6 +119,16 @@ caso de `migrate`). Es deliberado: casi todas mueven o borran filas.
 
 ---
 
+## Publicación
+
+El código está en **https://github.com/aironpower/artlas** (privado) y el sitio
+se publica en **Vercel**, no en GitHub Pages. Los pasos y el porqué están en
+[DESPLIEGUE.md](DESPLIEGUE.md). Resumido: Pages no puede servir esta app —hacen
+falta servidor y 232.491 páginas contra su límite de 1 GB— y desde repo privado
+además es de pago.
+
+---
+
 ## Lo siguiente, en orden
 
 **1. Imágenes desde las APIs de los museos.** De las ~62.000 que esperan,
