@@ -92,6 +92,29 @@ Vercel pidió demostrar que `softie.dev` es nuestro con un TXT en
 `_vercel.softie.dev`. El nombre se pone solo como `_vercel`, no entero, o acaba
 en `_vercel.softie.dev.softie.dev`.
 
+**Y el que costó más caro: «Deployment was blocked».** Cuatro despliegues
+seguidos fallaron sin llegar a compilar. No era el código ni el proyecto: los
+commits iban firmados con un correo que no estaba en la cuenta de GitHub. Vercel exige
+que el autor del commit sea reconocible y bloquea antes de construir.
+
+Arreglado con una identidad **solo para este repositorio**, para no tocar la
+global que se usa en los repos del trabajo:
+
+```bash
+git config --local user.email "10366199+aironpower@users.noreply.github.com"
+git config --local user.name  "Manuel Giron"
+```
+
+Se usa la dirección `noreply` de GitHub y no el correo personal: vale igual y no
+deja el correo escrito en cada commit. Los commits ya hechos conservan el autor
+viejo —no se reescribe la historia por esto—, así que el primer commit nuevo es
+el que desbloquea y publica todo lo anterior de una vez.
+
+Cómo se reconoce: en la pestaña Deployments el despliegue aparece en rojo sin
+registro de construcción, y `gh api repos/<usuario>/artlas/deployments` devuelve
+`failure` con la descripción. Que GitHub registre un despliegue NO significa que
+se haya publicado; hay que mirar su estado.
+
 Y una que NO hizo falta: cambiar el CNAME. Vercel recomienda ahora unos
 registros nuevos, pero el `cname.vercel-dns.com` de siempre sigue valiendo.
 
