@@ -9,3 +9,4 @@ dist/
 out/
 supabase/.temp/
 ingesta.log
+apps/web/tsconfig.tsbuildinfo

@@ -26,45 +26,39 @@ Quedan DOS sin aplicar, `0017` y `0021`, y el motivo está más abajo.
 Hay además un **panel de revisión** en `/[lang]/admin`, con acceso por enlace
 al correo. `manuel@softie.dev` ya es administrador.
 
-### LO PRIMERO AL RETOMAR: hay una ingesta a medias
+### LO PRIMERO AL RETOMAR: mirar el barrido
 
-Quedó corriendo el barrido `--all --everything` y se atascó en el **Met**, que
-enriquece obra a obra contra su API: 7,3 obras/min frente a las 172 de un museo
-sin API. Le quedaban unas 17 horas.
+El 28 de agosto por la tarde quedó corriendo el barrido de los cuatro museos que
+se habían quedado a medias (Viena, Bélgica, Filadelfia y el **Met**, que es el
+largo). Va suelto, sin depender de ninguna sesión, y escribe en
+`ingesta-barrido.log`, en la raíz. Lo primero es ver si terminó y si algún museo
+se cayó:
 
-Intenté cortarlo y **no pude**: el agente tiene bloqueado terminar procesos. El
-proceso es el **pid 5724** (`node --require ... cli.ts`). Matarlo desde el
-Administrador de tareas es seguro — los checkpoints hacen que no se pierda nada.
+```bash
+tail -40 ingesta-barrido.log
+```
 
-**Ya está arreglada la causa** (enriquecimiento por lotes y solo para lo que le
-falta algo), así que al relanzar irá mucho más rápido. Pasos, en este orden:
+Los otros 44 museos se saltan solos. Estos cuatro se rehacen porque su
+checkpoint era de umbral 2 y ahora se pide 0.
+
+Ya hecho antes de lanzarlo, no hay que repetirlo:
+
+- **Las 22 migraciones están aplicadas** (`migrate --status` lo confirma).
+- **Movimientos fusionados**: quedaban 215, ahora 214. Solo había un duplicado
+  (*Gothic art* → *Gothic painting*).
+- **Los 198 artistas con nombre-URL, borrados**. Solo 28 tenían obras; esas 28
+  obras quedaron anónimas, que es lo correcto. Las claves ajenas hicieron el
+  trabajo: `on delete set null` en `artworks` y `on delete cascade` en las
+  traducciones.
+
+Cuando el barrido termine:
 
 ```bash
 cd packages/ingest
-
-# 1. Comprobar que no queda ninguna ingesta viva antes de tocar la base
-#    (aplicar migraciones o fusionar movimientos con una ingesta corriendo
-#     ya tumbó tres museos; ver los tropiezos)
-
-# 2. Las dos migraciones que faltan, que tocan `artworks` y por eso esperaban
-npm run migrate -- --dry-run
-npm run migrate
-
-# 3. Los movimientos, que la ingesta vieja pudo volver a duplicar
-npm run merge-movements            # enseña qué haría
-npm run merge-movements -- --apply
-
-# 4. Los museos que quedaron a medias: Met, Viena, Bélgica y Filadelfia.
-#    Los tres últimos cayeron por fusionar movimientos con la ingesta viva.
-npm run start -- --all --everything
-
-# 5. Ahora sí, las imágenes que faltan
 npm run fill-images                # en seco: cuántas encontraría
-npm run fill-images -- --apply
+npm run fill-images -- --apply     # Nationalmuseum: 23.214 obras esperando
 npm run promote -- --apply         # publica las que ya cumplen
-
-# 6. Y volver a auditar, que la última pasada es de cuando había 6.460 obras
-npm run audit -- --images
+npm run audit -- --images          # la última pasada es de cuando había 6.460
 ```
 
 ### Comprobar al retomar
@@ -134,32 +128,26 @@ Commons, que sus museos sí publican.
 
 El conector del Nationalmuseum (23.214 esperando, un tercio del total) está
 escrito y sin ejecutar: `npm run fill-images`. Cruza por número de inventario,
-no por título — sus títulos están en sueco y los nuestros en inglés. Siguientes
-candidatos por obras que desbloquean: National Gallery of Victoria (5.227),
-Hermitage (4.601, sin API abierta), National Gallery of Canada (3.841), Harvard
-(3.492, **ya tenemos conector**), SMK (2.063, API abierta y probada), Prado
-(2.445, de los que 2.268 en dominio público).
+no por título — sus títulos están en sueco y los nuestros en inglés.
 
-**2. Los 198 artistas con nombre-URL que siguen dentro.** La puerta impide que
-entren nuevos, pero los viejos siguen ahí: 198 fichas mostrando
-`http://www.wikidata.org/.well-known/genid/…` donde va el pintor, y el contador
-de artistas de la portada inflado. Es un `UPDATE` y un borrado; borra filas, así
-que hay que preguntar antes.
+**Es el único conector de imágenes que existe.** Los demás museos están en la
+lista de «algún día» del final: cada uno es un conector nuevo, y Manuel decidió
+el 28 de agosto que no bloqueen el trabajo en la aplicación.
 
-**3. Las ~60.000 imágenes sin verificar**, en pasadas incrementales de 800
+**2. Las ~60.000 imágenes sin verificar**, en pasadas incrementales de 800
 (`npm run audit -- --images`).
 
-**4. Terminar el panel.** Ya hay bandeja de hallazgos con confirmar y descartar.
+**3. Terminar el panel.** Ya hay bandeja de hallazgos con confirmar y descartar.
 Falta: alta manual de obras, y publicar o retirar una obra a mano (que necesita
 su política de escritura sobre `artworks`, con `status_locked` para que la
 ingesta no pise la decisión).
 
-**5. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
+**4. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
 desde Wikidata aunque ya las tengamos idénticas. Saltarse los QID ya conocidos
 haría que añadir museos nuevos costara solo lo nuevo. Es lo que más rendiría de
 cara a seguir metiendo museos.
 
-**6. Rotar la contraseña de la base**, que pasó por una conversación.
+**5. Rotar la contraseña de la base**, que pasó por una conversación.
 
 ---
 
@@ -200,6 +188,29 @@ Sigue sirviendo para instituciones pequeñas. No para esto.
 ---
 
 ## Otras cosas pendientes
+
+### Los cinco conectores de imágenes que quedaron aparcados
+
+Cada uno es un conector nuevo (~1-2 h): buscar en la API del museo la obra que
+ya tenemos y traerse su foto. Ordenados por obras que desbloquean. Aparcados a
+propósito el 28 de agosto de 2026: no bloquean nada de la aplicación, y hacerlos
+todos era la cola infinita que impedía avanzar. Se harán de uno en uno, cuando
+apetezca.
+
+| Museo | Obras que desbloquea | Cómo está su API |
+|---|---|---|
+| National Gallery of Victoria | 5.227 | sin comprobar |
+| Hermitage | 4.601 | **sin API abierta**; probablemente no se pueda |
+| National Gallery of Canada | 3.841 | sin comprobar |
+| Harvard Art Museums | 3.492 | API con clave; hay conector de *enriquecimiento*, no de imágenes |
+| SMK (Dinamarca) | 2.063 | **abierta y ya probada** — el más fácil, y el que yo haría primero |
+| Prado | 2.445 | sin comprobar; 2.268 en dominio público |
+
+Antes de escribir cualquiera de ellos, la sonda de diez minutos: ¿tiene de
+verdad esa API la foto de una obra que ya tengamos, cruzada por su número de
+inventario? Medir antes de construir.
+
+### Lo demás
 
 - **Valoraciones de usuarios.** Tablas y RLS desde `0001`; falta Supabase Auth
   y la interfaz.
