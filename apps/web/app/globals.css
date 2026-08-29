@@ -17,19 +17,23 @@
   --text: #17150f;
   --muted: #6b645a;
 
-  --accent: #b34a1b;
-  --accent-soft: #f7ece5;
+  --accent: #bf5320;
+  --accent-soft: #f8ede6;
 
   /*
    * El verde de lo seleccionado.
    *
    * Los desplegables, las casillas y el texto marcado los pintaba el sistema
    * de azul, y ese azul era el único color de la pantalla que nadie había
-   * elegido: chillaba justo al lado del burdeos. Un verde oliva apagado se
-   * lleva bien con él —son casi opuestos en el círculo— y sigue leyéndose como
-   * «esto está elegido» sin robarle el papel al acento, que es el que manda.
+   * elegido: chillaba justo al lado del burdeos. Una salvia se lleva bien con
+   * él —son casi opuestos en el círculo— y sigue leyéndose como «esto está
+   * elegido» sin robarle el papel al acento, que es el que manda.
+   *
+   * Oscurecida respecto a la salvia de manual (#9caf88): esa, con texto blanco
+   * encima, se queda en 2,9:1 de contraste y no llega al mínimo legible. Esta
+   * mantiene el tono apagado y pasa de 4,5:1.
    */
-  --seleccion: #4a5c3a;
+  --seleccion: #66795a;
 
   /* Casi nada: una línea basta para separar dos superficies blancas. */
   --shadow: none;
@@ -46,9 +50,9 @@
     --border: #302b25;
     --text: #f2eee7;
     --muted: #a09689;
-    --accent: #ea8451;
-    --accent-soft: #2d201a;
-    --seleccion: #7f9463;
+    --accent: #f08d55;
+    --accent-soft: #2e211a;
+    --seleccion: #a3b78e;
     --shadow: none;
   }
 }
@@ -175,10 +179,16 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
  * gris ya no hace falta y solo engordaba el círculo; el contraste lo pone
  * ahora el único color de la pantalla.
  */
+/*
+ * Cuadradas, no redondas. Un círculo sobre un mapa se lee como «un sitio»; un
+ * cuadrado se lee como «una marca puesta encima», que es lo que es. Y con el
+ * mapa reducido a costas y agua, la única forma recta de la pantalla destaca
+ * sin necesitar cerco ni sombra.
+ */
 .pin {
   display: grid; place-items: center;
   background: var(--accent); color: #fff;
-  border: 0; border-radius: 999px;
+  border: 0; border-radius: 0;
   font-size: 0.72rem; font-weight: 700; cursor: pointer;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
@@ -189,7 +199,7 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
   display: grid; place-items: center;
   width: 13px; height: 13px; padding: 0;
   background: var(--accent); color: #fff;
-  border: 0; border-radius: 999px;
+  border: 0; border-radius: 0;
   font: inherit; font-size: 0.7rem; font-weight: 700; line-height: 1;
   cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
 }
@@ -256,13 +266,13 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
 .chip {
   display: inline-block; padding: 4px 11px;
   background: var(--accent-soft); color: var(--accent);
-  border-radius: 999px; font-size: 0.83rem; font-weight: 550;
+  border-radius: 0; font-size: 0.83rem; font-weight: 550;
 }
 
 /* --- Panel de revisión --------------------------------------------------- */
 
 .sev {
-  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  display: inline-block; padding: 1px 8px; border-radius: 0;
   font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -429,7 +439,7 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
  * campo concreto.
  */
 .defendido {
-  margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+  margin-left: 7px; padding: 1px 7px; border-radius: 0;
   background: var(--accent-soft); color: var(--accent);
   font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
 }
