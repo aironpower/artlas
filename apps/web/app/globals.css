@@ -248,6 +248,60 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   white-space: pre; color: var(--muted);
 }
 
+/* --- Mientras la página se trae sus datos ---------------------------------- */
+
+/*
+ * El brillo va de izquierda a derecha sobre un gris fijo, y no es un
+ * `opacity` que parpadea: un parpadeo dice «esto está roto», un barrido dice
+ * «esto viene en camino». Es la misma diferencia que entre una bombilla que
+ * falla y una barra de progreso.
+ */
+.esqueleto {
+  display: inline-block;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.esqueleto::after {
+  content: '';
+  position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 55%, transparent),
+    transparent
+  );
+  animation: barrido 1.4s ease-in-out infinite;
+}
+
+@keyframes barrido { to { transform: translateX(100%); } }
+
+/*
+ * Quien ha pedido que no le muevan la pantalla no quiere una animación
+ * infinita corriendo debajo de cada tarjeta. El gris se queda; el barrido no.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto::after { animation: none; }
+}
+
+/* La rejilla del esqueleto usa `.card`, que es un enlace: aquí no lo es. */
+.card > .esqueleto.card-image { margin-bottom: 10px; }
+.card > .esqueleto + .esqueleto { margin-top: 6px; }
+
+/*
+ * Para un lector de pantalla, veinte manchas grises no son información. Se
+ * ocultan con `aria-hidden` y en su lugar se anuncia, solo para él, que la
+ * página está cargando.
+ */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
 /* --- Corregir una ficha a mano ------------------------------------------- */
 
 .ficha { display: grid; gap: 16px 18px; grid-template-columns: repeat(12, 1fr); padding: 20px 0 0; }

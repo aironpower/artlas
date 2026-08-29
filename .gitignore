@@ -14,3 +14,4 @@ apps/web/.next-dev/
 .claude/
 packages/ingest/tmp-*
 muestreo-espacio.txt
+tmp-*.mjs
