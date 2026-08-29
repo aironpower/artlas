@@ -17,8 +17,19 @@
   --text: #17150f;
   --muted: #6b645a;
 
-  --accent: #a33b1c;
-  --accent-soft: #f5eae4;
+  --accent: #b34a1b;
+  --accent-soft: #f7ece5;
+
+  /*
+   * El verde de lo seleccionado.
+   *
+   * Los desplegables, las casillas y el texto marcado los pintaba el sistema
+   * de azul, y ese azul era el único color de la pantalla que nadie había
+   * elegido: chillaba justo al lado del burdeos. Un verde oliva apagado se
+   * lleva bien con él —son casi opuestos en el círculo— y sigue leyéndose como
+   * «esto está elegido» sin robarle el papel al acento, que es el que manda.
+   */
+  --seleccion: #4a5c3a;
 
   /* Casi nada: una línea basta para separar dos superficies blancas. */
   --shadow: none;
@@ -35,8 +46,9 @@
     --border: #302b25;
     --text: #f2eee7;
     --muted: #a09689;
-    --accent: #e0764f;
-    --accent-soft: #2b1f19;
+    --accent: #ea8451;
+    --accent-soft: #2d201a;
+    --seleccion: #7f9463;
     --shadow: none;
   }
 }
@@ -88,6 +100,18 @@ input[type='search'], input[type='text'], input[type='number'], select {
 }
 
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/*
+ * `accent-color` es lo que pinta las casillas y los radios; el resaltado de la
+ * opción abierta de un `<select>` lo pinta el sistema y solo algunos
+ * navegadores dejan tocarlo, así que se hacen las dos cosas. Donde no se
+ * pueda, se queda como estaba: no es un fallo, es el límite del control nativo.
+ */
+input, select, textarea { accent-color: var(--seleccion); }
+
+option:checked, option:hover { background: var(--seleccion); color: #fff; }
+
+::selection { background: var(--seleccion); color: #fff; }
 
 /* Un desplegable apagado tiene que parecerlo, no parecer roto. */
 select:disabled { color: var(--muted); background: var(--accent-soft); cursor: not-allowed; }

@@ -47,39 +47,24 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
       center,
       zoom,
       attributionControl: { compact: true },
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '© OpenStreetMap',
-          },
-        },
-        layers: [{
-          id: 'osm',
-          type: 'raster',
-          source: 'osm',
-          /*
-           * El mapa, en gris.
-           *
-           * Se desatura en la capa, con las propiedades de MapLibre, y no con
-           * un `filter: grayscale()` de CSS: el filtro de CSS se aplica al
-           * lienzo entero y se llevaría por delante también los chinchetas y
-           * los globos, que son justamente lo que tiene que destacar.
-           *
-           * Y se sube el brillo mínimo además de quitar el tono: un mapa de
-           * OSM desaturado a secas queda de un gris medio sucio que compite
-           * con las obras. Aclarado, pasa a ser el papel sobre el que están.
-           */
-          paint: {
-            'raster-saturation': -1,
-            'raster-contrast': -0.15,
-            'raster-brightness-min': 0.22,
-          },
-        }],
-      },
+      /*
+       * El estilo entero viene de OpenFreeMap, no se arma aqui.
+       *
+       * Positron: costas, agua y poco mas, con las etiquetas apareciendo solo
+       * al acercarse. El mapa no es el contenido -es el papel sobre el que se
+       * posan las obras- y las teselas normales de OSM, dibujadas para
+       * orientarse andando, competian con las chinchetas.
+       *
+       * Por que OpenFreeMap y no CARTO, que es el Positron original: CARTO ya
+       * exige clave de API y devuelve las teselas estampadas con "API KEY
+       * REQUIRED". Se probo y se vio: respondian 200, asi que ninguna
+       * comprobacion de red lo habria cazado; hizo falta mirar la imagen.
+       *
+       * Es un servicio de terceros sin contrato. Si un dia no responde, el
+       * mapa se queda gris y las chinchetas siguen ahi, porque son marcadores
+       * del DOM y no una capa del estilo.
+       */
+      style: 'https://tiles.openfreemap.org/styles/positron',
     });
 
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
