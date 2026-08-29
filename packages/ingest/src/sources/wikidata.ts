@@ -41,8 +41,8 @@
 
 import { fetchJson, RateLimiter } from '../util/http.js';
 import {
-  LANGUAGES, type CanonicalArtwork, type CanonicalInstitution, type Category,
-  type CanonicalMovement, type Lang, type Localized, type MuseumSeed,
+  LANGUAGES, type CanonicalArtist, type CanonicalArtwork, type CanonicalInstitution,
+  type Category, type CanonicalMovement, type Lang, type Localized, type MuseumSeed,
 } from '../types.js';
 
 /**
@@ -285,10 +285,12 @@ async function* listWorkQids(
   pageSize: number,
   hardLimit: number,
   minNotability: number,
+  onPageError?: (err: Error, lost: number) => void,
 ): AsyncGenerator<string[]> {
   const holderValues = holders.map((h) => `wd:${h}`).join(' ');
   let offset = 0;
   let total = 0;
+  let seguidos = 0;   // páginas fallidas seguidas
 
   const curated = minNotability > 0;
 
@@ -311,7 +313,29 @@ async function* listWorkQids(
       ${ordering}
       LIMIT ${pageSize} OFFSET ${offset}`;
 
-    const rows = await sparql(query, `enumerar +${offset}`);
+    /*
+     * Una página perdida no es el museo perdido. La paginación va por OFFSET,
+     * así que se puede saltar la página rota y seguir por la siguiente: cuesta
+     * las obras de esa página, no las 8.000 del museo. La Galería Nacional de
+     * Arte murió así el 29 de agosto de 2026, con un 502 en la tercera página
+     * y las dos primeras ya escritas.
+     *
+     * El tope de fallos SEGUIDOS existe para no insistir contra una consulta
+     * que sencillamente no puede responderse: si tres páginas consecutivas
+     * caen, el problema no es pasajero y el museo se aborta de verdad.
+     */
+    let rows: Row[];
+
+    try {
+      rows = await sparql(query, `enumerar +${offset}`);
+      seguidos = 0;
+    } catch (err) {
+      if (!onPageError || ++seguidos >= 3) throw err;
+      onPageError(err as Error, pageSize);
+      offset += pageSize;
+      continue;
+    }
+
     const qids = rows.map((r) => qid(val(r, 'work'))).filter((q): q is string => Boolean(q));
 
     if (qids.length === 0) return;
@@ -487,6 +511,108 @@ async function fetchTexts(entityQids: string[]): Promise<Map<string, EntityText>
   return result;
 }
 
+/**
+ * El autor de un puñado de obras que YA están en el catálogo, y nada más.
+ *
+ * Existe para reparar las 9.336 obras publicadas que se quedaron sin autor
+ * cuando Wikidata movió los nombres a `mul` (ver el comentario de LANG_FILTER).
+ * Reingerir esos museos enteros costaría horas y reescribiría 60.000 filas
+ * para arreglar el 15% de una columna.
+ *
+ * No es una segunda versión de la regla del nombre: llama a las mismas
+ * `fetchTexts` y `nombreDeAutor` que usa la ingesta. Si un día cambia el
+ * criterio de "esto es un nombre de verdad", cambia en un solo sitio.
+ *
+ * Devuelve un artista por obra; las obras cuyo autor sigue sin nombre no
+ * aparecen en `porObra`, que es lo mismo que hace la ingesta: sin nombre en
+ * ninguna de las dos fuentes, la autoría es anónima de verdad.
+ *
+ * `conCreador` dice además cuáles declaran un P170 que apunta a una entidad de
+ * verdad, tengan nombre resoluble o no. Sin ese dato no se puede distinguir
+ * "Wikidata no sabe quién la pintó" —que es correcto y no hay nada que
+ * reparar— de "lo sabe y nosotros seguimos sin sacarle el nombre", que sí
+ * sería un fallo nuestro.
+ */
+export interface Creators {
+  porObra: Map<string, CanonicalArtist>;
+  conCreador: Set<string>;
+}
+
+export async function fetchCreators(workQids: string[]): Promise<Creators> {
+  const out = new Map<string, CanonicalArtist>();
+  const conCreador = new Set<string>();
+  if (workQids.length === 0) return { porObra: out, conCreador };
+
+  const values = workQids.map((q) => `wd:${q}`).join(' ');
+
+  /*
+   * Consulta deliberadamente flaca: P170 y los tres escalares del autor. Sin
+   * GROUP_CONCAT ni etiquetas por idioma, que es lo que hace lenta a
+   * `hydrateScalars`. Los nombres llegan aparte, en `fetchTexts`.
+   */
+  const rows = await sparql(`
+    SELECT ?work ?creator ?creatorLabel ?birth ?death ?nationalityLabel WHERE {
+      VALUES ?work { ${values} }
+      ?work wdt:P170 ?creator .
+      OPTIONAL { ?creator wdt:P569 ?birth }
+      OPTIONAL { ?creator wdt:P570 ?death }
+      OPTIONAL { ?creator wdt:P27 ?nationality }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "mul,en,es". }
+    }`,
+    `autores ${workQids.length}`);
+
+  /*
+   * Una obra con varios P170 da varias filas, y no todas valen lo mismo.
+   *
+   * Wikidata dice "tiene autor, pero no se sabe quién" con un VALOR DESCONOCIDO,
+   * que en SPARQL llega como un nodo `.well-known/genid/…`, no como un QID. Eso
+   * es una autoría anónima declarada, no un nombre que se nos escape: contarla
+   * como fallo nuestro haría creer que quedan miles de autores por rescatar.
+   *
+   * Así que `conCreador` solo cuenta las autorías que apuntan a una entidad de
+   * verdad, y ante varias filas se prefiere esa a la del valor desconocido.
+   */
+  const esEntidad = (row: Row): boolean => !!qid(val(row, 'creator'))?.startsWith('Q');
+
+  const primeraFila = new Map<string, Row>();
+  for (const row of rows) {
+    const work = qid(val(row, 'work'));
+    if (!work) continue;
+
+    if (esEntidad(row)) conCreador.add(work);
+
+    const actual = primeraFila.get(work);
+    if (!actual || (esEntidad(row) && !esEntidad(actual))) primeraFila.set(work, row);
+  }
+
+  const creatorQids = [...new Set(
+    [...primeraFila.values()]
+      .map((row) => qid(val(row, 'creator')))
+      .filter((q): q is string => !!q && q.startsWith('Q')),
+  )];
+
+  const textos = await fetchTexts(creatorQids);
+
+  for (const [work, row] of primeraFila) {
+    const creatorQid = qid(val(row, 'creator'));
+    const creatorTexts = (creatorQid && textos.get(creatorQid)) || { labels: {}, descriptions: {} };
+    const name = nombreDeAutor(val(row, 'creatorLabel'), creatorQid, creatorTexts);
+    if (!name) continue;
+
+    out.set(work, {
+      wikidataQid: creatorQid?.startsWith('Q') ? creatorQid : undefined,
+      name,
+      names: creatorTexts.labels,
+      descriptions: creatorTexts.descriptions,
+      birthYear: yearOf(val(row, 'birth')),
+      deathYear: yearOf(val(row, 'death')),
+      nationality: val(row, 'nationalityLabel'),
+    });
+  }
+
+  return { porObra: out, conCreador };
+}
+
 // ---------------------------------------------------------------------------
 // 5. Orquestación
 // ---------------------------------------------------------------------------
@@ -500,6 +626,23 @@ export interface FetchWorksOptions {
   pageSize?: number;
   /** Tope de obras por museo. */
   limit?: number;
+  /**
+   * Aviso de que un lote de hidratación se ha perdido.
+   *
+   * Existe para que perder un lote NO sea perder el museo. Wikidata falla a
+   * ratos —504, 429, la conexión que se corta— y hasta el 29 de agosto de 2026
+   * esa excepción salía del generador y abortaba el museo entero: el Met murió
+   * así dos días seguidos, después de horas de trabajo bueno ya escrito.
+   *
+   * Quien lo recibe decide qué hacer; aquí solo se sigue con el lote siguiente.
+   * Lo que NO puede pasar es que se pierda en silencio, así que el que llama
+   * está obligado a contarlo y a no dar el museo por completo.
+   *
+   * `perdidas` es cuántas obras se quedan sin mirar. En la fase de hidratación
+   * es exacto; en la de enumeración es el tamaño de página, porque de esas
+   * obras no llegamos a saber ni el QID.
+   */
+  onBatchError?: (err: Error, perdidas: number, fase: 'enumerar' | 'hidratar') => void;
 }
 
 export async function* fetchArtworks(
@@ -512,32 +655,55 @@ export async function* fetchArtworks(
     minNotability = 0,
     pageSize = 500,
     limit = 20_000,
+    onBatchError,
   } = opts;
 
   const holders = await expandHolders(museum.qid);
   const emitted = new Set<string>();
   let yielded = 0;
 
-  for await (const page of listWorkQids(holders, pageSize, limit, minNotability)) {
+  const onPageError = onBatchError
+    ? (err: Error, perdidas: number) => onBatchError(err, perdidas, 'enumerar')
+    : undefined;
+
+  for await (const page of listWorkQids(holders, pageSize, limit, minNotability, onPageError)) {
     for (let i = 0; i < page.length; i += HYDRATE_BATCH) {
       const batch = page.slice(i, i + HYDRATE_BATCH);
-      const rows = await hydrateScalars(batch);
 
-      // Reunimos TODAS las entidades cuyo texto hace falta —obras, autores,
-      // materiales, géneros y movimientos— y pedimos sus etiquetas de una vez.
-      // Una sola consulta plana por lote, en vez de multiplicar la de arriba.
-      const needText = new Set<string>();
-      for (const row of rows) {
-        for (const key of ['work', 'creator', 'material', 'genre'] as const) {
-          const id = qid(val(row, key));
-          if (id) needText.add(id);
+      /*
+       * Las dos consultas del lote van juntas dentro del try porque el lote es
+       * la unidad que se pierde: sin sus escalares o sin sus textos no hay nada
+       * que emitir. Si falla, se avisa y se sigue con el siguiente. Un museo de
+       * 8.000 obras no puede evaporarse porque WDQS tosiera en el lote 40.
+       */
+      let rows: Row[];
+      let texts: Map<string, EntityText>;
+
+      try {
+        rows = await hydrateScalars(batch);
+
+        // Reunimos TODAS las entidades cuyo texto hace falta —obras, autores,
+        // materiales, géneros y movimientos— y pedimos sus etiquetas de una vez.
+        // Una sola consulta plana por lote, en vez de multiplicar la de arriba.
+        const needText = new Set<string>();
+        for (const row of rows) {
+          for (const key of ['work', 'creator', 'material', 'genre'] as const) {
+            const id = qid(val(row, key));
+            if (id) needText.add(id);
+          }
+          for (const m of (val(row, 'movements') ?? '').split('|')) {
+            if (m) needText.add(m);
+          }
         }
-        for (const m of (val(row, 'movements') ?? '').split('|')) {
-          if (m) needText.add(m);
-        }
+
+        texts = await fetchTexts([...needText]);
+      } catch (err) {
+        // Sin quien lo recoja, se vuelve al comportamiento de antes: mejor
+        // abortar que perder obras sin que nadie se entere.
+        if (!onBatchError) throw err;
+        onBatchError(err as Error, batch.length, 'hidratar');
+        continue;
       }
-
-      const texts = await fetchTexts([...needText]);
 
       for (const row of rows) {
         const workQid = qid(val(row, 'work'));

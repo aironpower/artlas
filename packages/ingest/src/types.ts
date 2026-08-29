@@ -147,4 +147,8 @@ export interface IngestStats {
   rejected: number;
   /** Obras que entraron con algún dato corregido. */
   repaired: number;
+  /** Lotes que Wikidata no devolvió ni tras los reintentos. */
+  lostBatches: number;
+  /** Obras que había en esos lotes y no llegaron a mirarse. */
+  lostWorks: number;
 }

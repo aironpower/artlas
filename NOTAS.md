@@ -1,62 +1,125 @@
 # Notas de trabajo
 
-Estado al 28 de agosto de 2026 y lo siguiente a hacer.
+Estado al 29 de agosto de 2026 (madrugada) y lo siguiente a hacer.
+
+---
+
+## AL EMPEZAR: lo que queda por hacer
+
+Nada está corriendo. El catálogo está sano: 147.869 obras, 47 de 48 museos
+completos, 214 MB de los 500 del plan gratuito.
+
+**Lo que Manuel quiere que se haga, por orden:**
+
+1. **La aplicación de ingesta.** Es lo que pidió el 29 de agosto y va delante de
+   todo, porque cambia *cómo* se hace el resto. Dos mitades, y la primera es la
+   urgente: (a) ver la ingesta en vivo desde el panel, con su estado en la base
+   en vez de en un fichero de texto; (b) formularios para crear y corregir
+   obras, artistas, museos y movimientos a mano. Sección **LA APLICACIÓN DE
+   INGESTA**, con lo que hay que decidir antes de escribir el primer formulario.
+
+2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
+   está medido y el arreglo identificado —partir la consulta por titulares de
+   ≤5—, pero **hay que volver a medir con WDQS sano** antes de escribirlo.
+   Sección propia.
+
+3. **Imágenes de las obras que esperan**: `fill-images` (Nationalmuseum, ~23.000
+   obras), luego `promote` y `audit -- --images`.
+
+4. **Ingesta incremental**: no rehidratar desde Wikidata lo que ya tenemos
+   igual. Es lo que más rinde de cara a seguir metiendo museos.
+
+5. **Rotar la contraseña de la base**, que pasó por una conversación.
+
+6. **El repaso visual de la web**, que sigue pendiente desde el 28: la ficha de
+   obra no ofrece a dónde seguir, la tarjeta mide 580 px en el móvil, los
+   títulos arrastran ruido de Wikidata («El columpio (Goya)») y faltan las
+   transiciones entre vistas. Sección **Lo hecho en la web**.
+
+Y una advertencia que ahorra una noche: **no usar `reanudar-ingesta.cmd`**, que
+no es de fiar. El comando que sí funciona está en la sección siguiente.
 
 ---
 
 ## Dónde nos quedamos
 
-El catálogo pasó de **6.161 obras a 113.783** en un barrido de 9 h 36 min sobre
-los 48 museos. Lo que cambió no fue solo el tamaño: cambió la idea. Antes se
-descartaba lo que no se podía enseñar; ahora se guarda todo y una columna dice
-qué es visible.
+El catálogo pasó de **6.161 obras a 147.869**. Lo que cambió no fue solo el
+tamaño: cambió la idea. Antes se descartaba lo que no se podía enseñar; ahora se
+guarda todo y una columna dice qué es visible.
+
+Cifras del 29 de agosto de 2026, tras entrar el Met (21.291 obras él solo):
 
 | | |
 |---|---|
-| Obras en total | ~124.600 |
-| Publicadas (visibles en la app) | ~62.000 |
-| Esperando datos | ~62.000 |
+| Obras en total | 147.869 |
+| Publicadas (visibles en la app) | 76.667 |
+| Esperando datos | 71.200 |
 | Rechazadas (no son obras) | 2 |
-| Espacio | ~160 MB de los 500 del plan gratuito |
+| Artistas | 17.616 |
+| Museos en el mapa | 48 (47 completos; falta la Galería Nacional de Arte) |
+| Espacio | **214 MB** de los 500 del plan gratuito (42,8%) |
 | Idiomas | es, en, fr (eran 7; se recortó por espacio) |
 
-Migraciones `0001`–`0022`. **Ya no se aplican a mano**: `npm run migrate`.
-Quedan DOS sin aplicar, `0017` y `0021`, y el motivo está más abajo.
+**Ojo al espacio**: eran ~160 MB con 124.600 obras y ahora son 214 con 147.869,
+o sea ~1,45 KB por obra. Quedan unas 195.000 obras de margen antes de tocar los
+500 MB. Sigue habiendo sitio para más museos, pero ya no es ilimitado y conviene
+mirarlo (`npm run check-db`) antes de meter uno grande.
+
+Migraciones `0001`–`0025`, **todas aplicadas** (comprobado el 29 de agosto con
+`npm run migrate -- --status`). Ya no se aplican a mano: `npm run migrate`.
 
 Hay además un **panel de revisión** en `/[lang]/admin`, con acceso por enlace
 al correo. `manuel@softie.dev` ya es administrador.
 
-### LO PRIMERO AL RETOMAR: mirar el barrido
+### Estado del barrido (29 de agosto de 2026, 04:00)
 
-El 28 de agosto por la tarde quedó corriendo el barrido de los cuatro museos que
-se habían quedado a medias (Viena, Bélgica, Filadelfia y el **Met**, que es el
-largo). Va suelto, sin depender de ninguna sesión, y escribe en
-`ingesta-barrido.log`, en la raíz. Lo primero es ver si terminó y si algún museo
-se cayó:
+**47 de los 48 museos están completos.** El barrido de esa madrugada duró
+2 h 37 min y metió el Met entero, que llevaba dos días atascado: 21.291 obras él
+solo. Solo falta la **Galería Nacional de Arte**, y tiene sección propia más
+abajo.
+
+Al retomar, lo primero es mirar si hay algo corriendo y cómo acabó:
 
 ```bash
-tail -40 ingesta-barrido.log
+tail -40 ingesta.log          # el barrido del 29
+grep -E "✗|lote perdido|INCOMPLETO|Obras perdidas" ingesta.log
 ```
 
-Los otros 44 museos se saltan solos. Estos cuatro se rehacen porque su
-checkpoint era de umbral 2 y ahora se pide 0.
+`ingesta-barrido.log` e `ingesta-fallido-utf16.log` son rastros de los intentos
+fallidos del 28 y del 29; no hace falta leerlos.
 
-Ya hecho antes de lanzarlo, no hay que repetirlo:
+**NO usar `reanudar-ingesta.cmd`: no es de fiar.** El 29 de agosto se descubrió
+que **nunca ha llegado a lanzar un barrido**. Moría siempre en las migraciones
+sin escribir una línea, y el log del 28 lo demuestra: se corta en el mismo sitio
+que el del 29. Se le arreglaron dos trampas reales de PowerShell 5.1 (están
+documentadas dentro del script: `2>&1` con `$ErrorActionPreference = 'Stop'`, y
+el UTF-16 de `Tee-Object`) y **aun así se murió una segunda vez en silencio**,
+sin disparar ni su propio `trap`. Queda sin diagnosticar.
 
-- **Las 22 migraciones están aplicadas** (`migrate --status` lo confirma).
-- **Movimientos fusionados**: quedaban 215, ahora 214. Solo había un duplicado
-  (*Gothic art* → *Gothic painting*).
-- **Los 198 artistas con nombre-URL, borrados**. Solo 28 tenían obras; esas 28
-  obras quedaron anónimas, que es lo correcto. Las claves ajenas hicieron el
-  trabajo: `on delete set null` en `artworks` y `on delete cascade` en las
-  traducciones.
+La forma que sí funciona es lanzar el barrido directamente, sin PowerShell de
+por medio:
 
-Cuando el barrido termine:
+```
+cmd /c "chcp 65001 >nul & set PATH=%APPDATA%\nvm\v22.12.0;%PATH% & cd /d C:\projects\artlas\packages\ingest & npm run start -- --all --everything >> C:\projects\artlas\ingesta.log 2>&1"
+```
+
+Antes, a mano: `npm run migrate -- --status` y comprobar que no hay ingesta viva
+(`Get-CimInstance Win32_Process -Filter "Name = 'node.exe'"` filtrando por
+`cli.ts`). Tocar el catálogo con una ingesta viva ya tumbó un museo.
+
+Ya hecho, no hay que repetirlo:
+
+- **Las 25 migraciones, aplicadas.**
+- **Movimientos fusionados** (215 → 214) y **198 artistas con nombre-URL,
+  borrados**.
+- **Autores recuperados**: 1.545 obras, Guernica entre ellas. Sección propia.
+
+Lo siguiente, que ya se puede hacer porque no hay ingesta corriendo:
 
 ```bash
 cd packages/ingest
 npm run fill-images                # en seco: cuántas encontraría
-npm run fill-images -- --apply     # Nationalmuseum: 23.214 obras esperando
+npm run fill-images -- --apply     # Nationalmuseum: ~23.000 obras esperando
 npm run promote -- --apply         # publica las que ya cumplen
 npm run audit -- --images          # la última pasada es de cuando había 6.460
 ```
@@ -136,13 +199,88 @@ es de pago.
 
 ---
 
-## PENDIENTE AL RETOMAR: recuperar 9.336 autores perdidos
+## PENDIENTE: la Galería Nacional de Arte (Q214867) no entra
 
-El código ya no pierde autores, pero **las obras que ya están dentro siguen sin
-el suyo**: 9.336 publicadas, el 15%, Guernica entre ellas. Hace falta una pasada
-que las repare, y todavía no está escrita. Lo que tendría que hacer: para cada
-obra publicada sin `artist_id`, pedir su `P170` a Wikidata, resolver el nombre
-—ya con `mul`— y crear o enlazar el artista. Son unos 19 lotes de 500.
+Es el único museo de los 48 que sigue fuera. Cayó dos veces el 29 de agosto de
+2026 enumerando, con 504 y 502. **No tiene checkpoint**, así que cualquier
+barrido la reintenta sola; no hay que hacer nada especial para que se reintente.
+
+Medido antes de tocar nada, y desmintiendo la hipótesis obvia: **no es el
+`OFFSET` profundo**. Su consulta de enumeración es cara de por sí y no cabe en
+los 60 s del endpoint.
+
+```
+  A) como está hoy          OFFSET 0     65,3 s  ✗ 504
+                            OFFSET 500   60,4 s  ✗ 429
+                            OFFSET 1000  65,5 s  ✗ 504
+  B) por cursor, sin OFFSET pág. 1       54,8 s  ✓ 500 filas
+                            pág. 2       60,2 s  ✗ 500
+  C) partida por titular    1 titular    25,9 s  ✓
+                            5 titulares  31,8 s  ✓
+                            10 titulares 65,2 s  ✗ 504
+```
+
+**El arreglo candidato es partir por titulares en grupos de ≤5** —tiene 37 en su
+árbol— y paginar dentro de cada grupo. Es la lección nº2 de la cabecera de
+`wikidata.ts` aplicada un nivel más abajo: cuando algo va lento, partir la
+consulta.
+
+**No implementado a propósito.** Durante la medición WDQS devolvía 429 y 502 a
+los 216 ms, que no es una consulta cara sino el servidor echándonos tras una
+noche entera de barridos. Diseñar sobre esos números sería construir sobre
+ruido. **Volver a medir con el endpoint sano antes de escribir el cambio.**
+
+---
+
+## HECHO: autores recuperados (1.545), y por qué no eran 9.336
+
+`npm run fix-artists -- --apply`, ejecutado el 29 de agosto de 2026.
+**1.545 obras recuperaron su autor**, 122 artistas distintos, cero lotes
+fallidos. **Guernica ya es de Pablo Picasso** (era la prueba de fuego).
+
+**El titular anterior de estas notas —«9.336 autores perdidos»— era falso.** Sí
+había miles de obras publicadas sin `artist_id`, pero la mayoría son anónimas de
+verdad: no declaran `P170`, o lo declaran con el **valor desconocido** de
+Wikidata —«tiene autor, pero no se sabe quién»—, que en SPARQL llega como un
+nodo `genid` y no como un QID. Confundir ese caso con un fallo propio hacía
+creer que quedaban miles de autores por rescatar. Fallo nuestro de verdad: **10
+de 13.764**, un 0,07%. Ruido, no un filón.
+
+La pasada es reanudable e idempotente (solo mira `artist_id is null`) y separa
+los tres casos en su resumen, para que si ese 0,07% sube algún día, se note.
+
+**Quedan 12.278 publicadas sin autor y está bien que así sea**: son las anónimas.
+No volver a leer ese número como una avería.
+
+Cuidado con el nombre de las banderas: `npm run … -- --limit 50` **no llega al
+script**, porque npm reconoce `--limit` como configuración suya y se la queda.
+Por eso la bandera se llama `--max`.
+
+### Los tres fallos de visibilidad que se arreglaron el 29 de agosto
+
+Los tres son de la misma familia, y son la razón de ser de la aplicación de
+ingesta que Manuel pidió: **el proceso fallaba y nadie se enteraba.**
+
+1. **Un lote perdido mataba el museo entero.** Si Wikidata agotaba los
+   reintentos en un lote de 50 obras, la excepción salía del generador y se
+   llevaba por delante horas de trabajo ya escrito. El Met murió así dos días
+   seguidos. Ahora se pierde el lote, se dice en voz alta y el museo sigue.
+   Igual con las páginas de enumeración, con un tope de tres fallos SEGUIDOS: a
+   la tercera, el problema no es pasajero y el museo aborta de verdad.
+
+2. **Un museo incompleto podía quedar marcado como hecho**, que es peor que
+   fallar: el checkpoint lo daba por bueno y no se reintentaba jamás. Ahora
+   guarda cuántas obras se perdieron (`lost`), y un museo con pérdidas se rehace
+   solo en el barrido siguiente.
+
+3. **El resumen final mentía.** Decía `Obras perdidas 0` con cuatro páginas
+   perdidas en el log, porque al abortar un museo sus cifras se quedaban en el
+   `catch` de `ingestAll` y no se sumaban a los totales. Ahora el fallo se
+   atiende dentro de `ingestMuseum`: cuenta lo perdido, devuelve lo conseguido y
+   **no escribe checkpoint**. Un resumen que miente es peor que no tenerlo,
+   porque se le cree.
+
+---
 
 ### Por qué se perdieron: el idioma `mul` de Wikidata
 
@@ -206,7 +344,15 @@ Lo que queda de aquel repaso visual, por orden de lo que más chirría:
 
 ## Lo siguiente, en orden
 
-**1. Imágenes desde las APIs de los museos.** De las ~62.000 que esperan,
+**0. La aplicación de ingesta**, si se hace caso a lo que Manuel pidió el 29 de
+agosto: quiere ver qué está pasando y poder editar el catálogo a mano. Tiene
+sección propia más abajo. Va delante de todo lo demás porque cambia *cómo* se
+hace el resto, no solo *qué*.
+
+**0 bis. La Galería Nacional de Arte**, el único museo que falta. Ya está
+medido; solo hay que volver a medir con WDQS sano y partir la consulta.
+
+**1. Imágenes desde las APIs de los museos.** De las ~71.000 que esperan,
 **todas esperan por lo mismo** (`image_missing`) y unas 22.500 están en dominio
 público. No es arte del siglo XX inaccesible: son obras libres sin foto en
 Commons, que sus museos sí publican.
@@ -222,17 +368,12 @@ el 28 de agosto que no bloqueen el trabajo en la aplicación.
 **2. Las ~60.000 imágenes sin verificar**, en pasadas incrementales de 800
 (`npm run audit -- --images`).
 
-**3. Terminar el panel.** Ya hay bandeja de hallazgos con confirmar y descartar.
-Falta: alta manual de obras, y publicar o retirar una obra a mano (que necesita
-su política de escritura sobre `artworks`, con `status_locked` para que la
-ingesta no pise la decisión).
-
-**4. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
+**3. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
 desde Wikidata aunque ya las tengamos idénticas. Saltarse los QID ya conocidos
 haría que añadir museos nuevos costara solo lo nuevo. Es lo que más rendiría de
 cara a seguir metiendo museos.
 
-**5. Rotar la contraseña de la base**, que pasó por una conversación.
+**4. Rotar la contraseña de la base**, que pasó por una conversación.
 
 ---
 
@@ -269,6 +410,56 @@ instituciones pequeñas. Los grandes museos de arte no ceden a agregadores sus
 imágenes en derechos. De nuestros 48 museos, aparecen 2 y con 4 y 3 registros.
 
 Sigue sirviendo para instituciones pequeñas. No para esto.
+
+---
+
+## LA APLICACIÓN DE INGESTA (pedida el 29 de agosto de 2026)
+
+Manuel paró el trabajo para decir que **la ingesta no puede seguir siendo una
+conversación con el asistente**: quiere un programa que la haga y una pantalla
+que enseñe qué está pasando. Sus palabras: *«no quiero que sea un diálogo
+contigo, quiero que sea un programa que lo hace»*, y *«no quiero que se quede
+intentándolo una y otra vez mientras falla y yo no sepa nada»*.
+
+**El caso que lo provocó**, para no perderlo de vista: el barrido del 28 de
+agosto dejó 6.546 líneas de log de las que ~6.400 eran `reintento N/M`.
+Filadelfia agotó sus cuatro reintentos y murió a las 19:17; el Met quedó cortado
+a mitad. Se supo catorce horas después, y porque alguien leyó el log a mano.
+
+Dos mitades. La primera es la urgente:
+
+### 1. Ver la ingesta
+
+- **La ingesta escribe su estado en la base**, no en un fichero de texto:
+  tablas de ejecuciones y de pasos (museo, paso, inicio, fin, obras escritas,
+  error). El log de texto se queda para el detalle, no para saber cómo va.
+- **Vista en `/[lang]/admin`** que lea esas tablas: en qué museo va, cuánto
+  lleva, qué terminó y con qué números, qué falló y con qué error. Refresco
+  solo, sin recargar.
+- **Reintentos acotados y visibles**: al agotarlos, el paso queda en `failed`
+  con el motivo. Hoy el error se lo traga el log.
+- **Reanudable sola**: si el proceso muere, el siguiente arranque sabe por
+  dónde iba sin que nadie lea nada. El checkpoint por museo ya existe
+  (`.checkpoints/*.json`); lo que falta es el estado *dentro* de un museo.
+- **Lanzar y parar desde la pantalla**, no desde la terminal.
+
+### 2. Editar el catálogo a mano
+
+Formularios en el panel para **crear y corregir obras, artistas, museos y
+movimientos**. Esto ya estaba pedido en pequeño («alta manual de obras») y ahora
+va entero.
+
+Lo que hay que resolver antes de escribir el primer formulario:
+
+- **Política de escritura sobre las tablas del catálogo.** Hoy solo escribe la
+  ingesta, con `service_role`. Hacen falta RLS de escritura para el rol de
+  administrador.
+- **`status_locked`** (o equivalente) para que la ingesta no pise una decisión
+  tomada a mano. Vale para el estado y para cualquier campo corregido: si
+  alguien arregla un título, la siguiente pasada de Wikidata no puede
+  devolverlo a como estaba.
+- **Qué manda cuando discrepan** la fuente y la persona. Sin esa regla escrita,
+  los formularios crean trabajo en vez de ahorrarlo.
 
 ---
 
@@ -313,6 +504,24 @@ inventario? Medir antes de construir.
 ---
 
 ## Tropiezos de método, para no repetirlos
+
+**Un lanzador que falla en silencio es peor que no tener lanzador.**
+`reanudar-ingesta.ps1` llevaba dos días sin lanzar un solo barrido y nadie lo
+sabía, porque moría sin escribir nada. Se dio por hecho que funcionaba al ver el
+proceso arrancar. La comprobación que faltaba costaba diez segundos: mirar si el
+log avanza más allá del arranque. Ver también las dos trampas de PowerShell 5.1
+que lo causaban, documentadas dentro del propio script.
+
+**Contar mal un dato de terceros parece un fallo propio.** Al reparar autores,
+el primer recuento decía que 1.662 de cada 2.000 obras «tenían autor y no
+sabíamos nombrarlo», que habría sido un filón. Eran autorías con el **valor
+desconocido** de Wikidata: anónimas declaradas. El fallo real era de 6 por cada
+2.000. Antes de dar por bueno un número que promete mucho, mirar qué hay dentro
+del dato.
+
+**`npm run … -- --limit N` no llega al script.** npm reconoce `--limit` como
+configuración suya y se la queda; al script solo le llega el número. Pasó con
+`fix-artists`, que ahora usa `--max`.
 
 **`create or replace function` NO puede cambiar el tipo de retorno.** Postgres
 aborta con `cannot change return type of existing function` y, como el editor

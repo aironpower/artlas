@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # Artlas - reanudar la ingesta sin necesidad de la sesion del asistente
 #
 # Se lanza haciendo doble clic en reanudar-ingesta.cmd, y hace tres cosas en
@@ -22,6 +22,37 @@ function Apunta($texto) {
     $linea = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $texto
     Write-Host $linea
     Add-Content -Path $log -Value $linea -Encoding utf8
+}
+
+# Nada puede morirse en silencio: si salta algo no previsto, queda escrito.
+trap {
+    Apunta "ERROR NO PREVISTO: $_"
+    Apunta "=== abortado ==="
+    exit 1
+}
+
+# ---------------------------------------------------------------------------
+# DOS TRAMPAS DE POWERSHELL 5.1 QUE TUMBARON ESTE SCRIPT EN SILENCIO
+#
+# Estuvo roto desde el principio y nadie lo supo: moría siempre en el mismo
+# punto, el ensayo de migraciones, sin escribir una sola linea de error.
+#
+# 1. `npm ... 2>&1` dentro de PowerShell 5.1 envuelve CADA linea de stderr en
+#    un ErrorRecord. Con $ErrorActionPreference = 'Stop' eso es un error
+#    terminante, aunque el comando devuelva 0. `migrate` imprime un aviso
+#    inofensivo sobre el certificado y con eso bastaba para matar el script.
+#    Solucion: que la redireccion la haga cmd, no PowerShell.
+#
+# 2. `Tee-Object` en 5.1 escribe UTF-16 y no acepta -Encoding. El log salia
+#    con un byte nulo entre letra y letra, ilegible para grep y para tail.
+#    Solucion: escribir con Add-Content -Encoding utf8.
+#
+# `Registra` arregla las dos: recibe la salida ya fusionada por cmd, la enseña
+# por pantalla y la anade al log en UTF-8.
+# ---------------------------------------------------------------------------
+filter Registra {
+    Write-Host $_
+    Add-Content -Path $log -Value $_ -Encoding utf8
 }
 
 # Node 22: el del PATH de Windows es el 16 y no sirve.
@@ -52,20 +83,23 @@ Apunta "no hay ninguna ingesta viva"
 
 # --- 2. Migraciones pendientes ---------------------------------------------
 Apunta "ensayando migraciones pendientes..."
-npm run migrate -- --dry-run 2>&1 | Tee-Object -FilePath $log -Append
+cmd /c "chcp 65001 >nul & npm run migrate -- --dry-run 2>&1" | Registra
 if ($LASTEXITCODE -ne 0) {
-    Apunta "el ensayo falla: NO se aplica nada y no se lanza la ingesta."
+    Apunta "el ensayo falla (codigo $LASTEXITCODE): NO se aplica nada y no se lanza la ingesta."
     exit 1
 }
 
 Apunta "aplicando migraciones..."
-npm run migrate 2>&1 | Tee-Object -FilePath $log -Append
-if ($LASTEXITCODE -ne 0) { Apunta "fallo al aplicar migraciones. Se sale."; exit 1 }
+cmd /c "chcp 65001 >nul & npm run migrate 2>&1" | Registra
+if ($LASTEXITCODE -ne 0) { Apunta "fallo al aplicar migraciones (codigo $LASTEXITCODE). Se sale."; exit 1 }
 
 # --- 3. El barrido ----------------------------------------------------------
 # Se salta solo los museos con checkpoint, asi que retoma donde se quedo:
 # Met, Viena, Belgica y Filadelfia.
 Apunta "lanzando el barrido completo (los museos ya hechos se saltan solos)"
-npm run start -- --all --everything 2>&1 | Tee-Object -FilePath $log -Append
+cmd /c "chcp 65001 >nul & npm run start -- --all --everything 2>&1" | Registra
+$codigo = $LASTEXITCODE
 
-Apunta "=== terminado (codigo $LASTEXITCODE) ==="
+if ($codigo -eq 0) { Apunta "=== terminado bien ==="       }
+else               { Apunta "=== TERMINADO MAL (codigo $codigo) ===" }
+exit $codigo

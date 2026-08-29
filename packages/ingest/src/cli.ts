@@ -216,8 +216,16 @@ async function main() {
   Duplicadas    ${stats.skipped}
   Corregidas    ${stats.repaired}
   Errores       ${stats.errors}
+  Obras perdidas ${stats.lostWorks}${stats.lostWorks > 0 ? ` en ${stats.lostBatches} lotes` : ''}
   Tiempo        ${elapsed}s
 ──────────────────────────────────────────`);
+
+  if (stats.lostWorks > 0) {
+    console.log(`  ⚠ ${stats.lostWorks} obras no llegaron a mirarse: Wikidata falló en esos lotes`);
+    console.log('  y agotó los reintentos. Los museos afectados quedaron marcados como');
+    console.log('  incompletos y el próximo barrido los rehace solos.');
+    console.log();
+  }
 
   if (stats.pending > 0) {
     console.log(`  ${stats.pending} obras guardadas esperando datos. No se ven en la app todavía.`);
