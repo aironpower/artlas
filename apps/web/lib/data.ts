@@ -165,6 +165,8 @@ export interface SearchFilters {
   movement?: string;
   artist?: string;
   country?: string;
+  /** Subfiltro del país: no tiene sentido suelto. */
+  city?: string;
   yearFrom?: number;
   yearTo?: number;
   category?: string;
@@ -197,6 +199,7 @@ export async function searchArtworks(
     p_year_from: filters.yearFrom ?? null,
     p_year_to: filters.yearTo ?? null,
     p_category: filters.category || null,
+    p_city: filters.city || null,
     max_results: filters.limit ?? 60,
     p_offset: filters.offset ?? 0,
   });
@@ -499,6 +502,35 @@ export async function listMovements(lang: Lang) {
     name: capitalize(pick(m.movement_translations, lang)?.name ?? m.name),
     count: m.artwork_count as number,
   }));
+}
+
+/**
+ * Ciudades con obras de un país, para el subfiltro.
+ *
+ * Devuelve el nombre canónico como valor y el traducido como etiqueta. El
+ * enlace lleva «New York» aunque la pantalla diga «Nueva York»: si se filtrara
+ * por la traducción, el mismo enlace daría resultados distintos en cada idioma.
+ */
+export async function listCities(lang: Lang, countryCode: string) {
+  const { data, error } = await db()
+    .from('institutions')
+    .select('city, artwork_count, institution_translations ( lang, city )')
+    .eq('country_code', countryCode.toUpperCase())
+    .gt('artwork_count', 0);
+
+  if (error) throw new Error(`ciudades: ${error.message}`);
+
+  const porCiudad = new Map<string, { value: string; name: string; count: number }>();
+
+  for (const inst of (data ?? []) as any[]) {
+    if (!inst.city) continue;
+    const nombre = pick(inst.institution_translations, lang)?.city ?? inst.city;
+    const ya = porCiudad.get(inst.city);
+    if (ya) ya.count += inst.artwork_count;
+    else porCiudad.set(inst.city, { value: inst.city, name: nombre, count: inst.artwork_count });
+  }
+
+  return [...porCiudad.values()].sort((a, b) => b.count - a.count);
 }
 
 /** Países con obras, para los filtros. */

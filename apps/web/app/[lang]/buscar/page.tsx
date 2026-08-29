@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { isLang, t, formatNumber, type Lang } from '@/lib/i18n';
-import { searchArtworks, listMovements, listCountries } from '@/lib/data';
+import { searchArtworks, listMovements, listCountries, listCities } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import Paginacion, { leerPagina } from '@/components/Paginacion';
@@ -28,11 +28,23 @@ export default async function SearchPage({ params, searchParams }: Params) {
   const sp = await searchParams;
   const pagina = leerPagina(sp.p);
 
+  /*
+   * Las ciudades se piden ANTES de buscar, y por eso no van en el `Promise.all`
+   * de abajo: hace falta saber si la ciudad elegida pertenece al país elegido.
+   *
+   * Sin esta comprobación, cambiar de país dejaba la ciudad anterior colgada en
+   * la URL —«pais=FR&ciudad=Madrid»— y la búsqueda devolvía cero resultados sin
+   * decir por qué. Cuesta una ida y vuelta más, y solo cuando hay país elegido.
+   */
+  const cities = sp.pais ? await listCities(lang, sp.pais) : [];
+  const ciudad = cities.some((c) => c.value === sp.ciudad) ? sp.ciudad : undefined;
+
   const filters = {
     query: sp.q,
     movement: sp.mov,
     artist: sp.artista,
     country: sp.pais,
+    city: ciudad,
     category: sp.cat,
     yearFrom: sp.desde ? Number(sp.desde) : undefined,
     yearTo: sp.hasta ? Number(sp.hasta) : undefined,
@@ -86,6 +98,20 @@ export default async function SearchPage({ params, searchParams }: Params) {
             <option value="">—</option>
             {countries.map((c) => (
               <option key={c.code} value={c.code}>{c.name} ({c.count})</option>
+            ))}
+          </select>
+        </Field>
+
+        {/*
+          * El subfiltro se enseña siempre, aunque esté vacío: apagado y
+          * diciendo por qué. Escondiéndolo hasta elegir país, nadie sabría que
+          * existe — y un filtro que no se ve es un filtro que no se usa.
+          */}
+        <Field label={t(lang, 'city')}>
+          <select name="ciudad" defaultValue={ciudad ?? ''} disabled={!sp.pais}>
+            <option value="">{sp.pais ? '—' : t(lang, 'cityNeedsCountry')}</option>
+            {cities.map((c) => (
+              <option key={c.value} value={c.value}>{c.name} ({c.count})</option>
             ))}
           </select>
         </Field>

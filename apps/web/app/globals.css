@@ -88,6 +88,9 @@ input[type='search'], input[type='text'], input[type='number'], select {
 
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
+/* Un desplegable apagado tiene que parecerlo, no parecer roto. */
+select:disabled { color: var(--muted); background: var(--accent-soft); cursor: not-allowed; }
+
 /*
  * Botones sin borde ni esquina redonda.
  *
