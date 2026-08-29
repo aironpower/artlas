@@ -205,6 +205,19 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .sev-warning { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
 .sev-info    { background: transparent; color: var(--muted); }
 
+/*
+ * «En curso» es el único estado que cambia mientras se mira, así que es el
+ * único que no puede parecerse a los demás. Con el gris de `sev-info` una
+ * ingesta viva y una terminada hace tres horas se leían igual, que es la
+ * confusión que esta pantalla vino a quitar.
+ */
+.sev-live { background: var(--accent); color: #fff; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .sev-live { animation: latido 1.8s ease-in-out infinite; }
+}
+@keyframes latido { 50% { opacity: 0.5; } }
+
 .findings { list-style: none; margin: 18px 0 0; padding: 0; }
 .findings li {
   display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;

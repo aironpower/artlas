@@ -34,6 +34,23 @@ export class RateLimiter {
   }
 }
 
+/*
+ * Reintentos gastados desde que arrancó el proceso.
+ *
+ * Un contador global y no un parámetro por llamada porque quien necesita el
+ * dato —la ingesta, para escribirlo junto al museo que estaba haciendo— está a
+ * cinco capas de aquí, y pasarlo a mano por las cinco solo para contar sería
+ * ensuciar cinco firmas. Se lee por diferencia: se anota antes de un museo y
+ * después, y la resta son sus reintentos.
+ *
+ * El motivo de contarlos: el barrido del 28 de agosto gastó ~6.400 reintentos
+ * y eso solo se veía leyendo 6.546 líneas de log. Como número, avisa de que
+ * una fuente se está portando mal mientras todavía se puede hacer algo.
+ */
+let reintentos = 0;
+
+export const retryCount = (): number => reintentos;
+
 export class HttpError extends Error {
   constructor(readonly status: number, readonly url: string, message: string) {
     super(message);
@@ -72,6 +89,7 @@ export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promis
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
+      reintentos++;
       const backoff = Math.min(2 ** attempt * 1000, 30_000) + Math.random() * 1000;
       console.warn(`  ↻ ${label}: reintento ${attempt}/${retries} en ${Math.round(backoff)}ms`);
       await sleep(backoff);

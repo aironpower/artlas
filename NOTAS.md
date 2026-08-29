@@ -1,6 +1,6 @@
 # Notas de trabajo
 
-Estado al 29 de agosto de 2026 (madrugada) y lo siguiente a hacer.
+Estado al 29 de agosto de 2026 (mediodía) y lo siguiente a hacer.
 
 ---
 
@@ -11,12 +11,12 @@ completos, 214 MB de los 500 del plan gratuito.
 
 **Lo que Manuel quiere que se haga, por orden:**
 
-1. **La aplicación de ingesta.** Es lo que pidió el 29 de agosto y va delante de
-   todo, porque cambia *cómo* se hace el resto. Dos mitades, y la primera es la
-   urgente: (a) ver la ingesta en vivo desde el panel, con su estado en la base
-   en vez de en un fichero de texto; (b) formularios para crear y corregir
-   obras, artistas, museos y movimientos a mano. Sección **LA APLICACIÓN DE
-   INGESTA**, con lo que hay que decidir antes de escribir el primer formulario.
+1. **La aplicación de ingesta.** La primera mitad —**ver la ingesta**— está
+   hecha el 29 de agosto por la mañana: el estado vive en la base y se mira en
+   `/es/admin/ingesta`. Queda la segunda: **formularios** para crear y corregir
+   obras, artistas, museos y movimientos a mano, y **lanzar** la ingesta desde
+   la pantalla (parar ya se puede). Sección **LA APLICACIÓN DE INGESTA**, con
+   las tres cosas que hay que decidir antes de escribir el primer formulario.
 
 2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
    está medido y el arreglo identificado —partir la consulta por titulares de
@@ -135,6 +135,19 @@ npm run check-perf            # ¿responden las consultas de la app? (clave anon
 npm run peek                  # qué hay en el catálogo
 ```
 
+Y para ver el panel sin esperar un correo (el acceso es por enlace mágico):
+
+```bash
+cd apps/web && npx next dev -p 3111
+node apps/web/scripts/ver-panel.mjs /es/admin/ingesta salida.png
+```
+
+`ver-panel.mjs` emite el mismo token que emitiría el correo, lo canjea y escribe
+la cookie con el propio código de `@supabase/ssr`. La página sigue leyendo con
+la sesión y sujeta a las políticas: es el camino del usuario, no un atajo. Desde
+Git Bash hace falta `MSYS_NO_PATHCONV=1` delante o convierte `/es/...` en una
+ruta de Windows.
+
 Requiere **Node 22**. Si `node -v` dice 16, es el del PATH de Windows; el bueno
 está en `%APPDATA%/nvm/v22.12.0`.
 
@@ -176,6 +189,7 @@ la segunda. `image_mode()` mira primero dónde está alojada la imagen.
 | `npm run fill-images` | Busca imágenes en la API del museo. |
 | `npm run merge-movements` | Fusiona movimientos duplicados. |
 | `npm run check-*` | Comprobaciones. |
+| `node apps/web/scripts/ver-panel.mjs <ruta> <png>` | Abre el panel con sesión de administrador. |
 
 **Todas escriben solo con `--apply`** (o aplican solo sin `--dry-run`, en el
 caso de `migrate`). Es deliberado: casi todas mueven o borran filas.
@@ -344,10 +358,10 @@ Lo que queda de aquel repaso visual, por orden de lo que más chirría:
 
 ## Lo siguiente, en orden
 
-**0. La aplicación de ingesta**, si se hace caso a lo que Manuel pidió el 29 de
-agosto: quiere ver qué está pasando y poder editar el catálogo a mano. Tiene
-sección propia más abajo. Va delante de todo lo demás porque cambia *cómo* se
-hace el resto, no solo *qué*.
+**0. La aplicación de ingesta.** Ver la ingesta ya está hecho (29 de agosto,
+mañana). Queda editar el catálogo a mano y lanzar desde la pantalla. Tiene
+sección propia más abajo. Sigue delante de todo lo demás porque cambia *cómo*
+se hace el resto, no solo *qué*.
 
 **0 bis. La Galería Nacional de Arte**, el único museo que falta. Ya está
 medido; solo hay que volver a medir con WDQS sano y partir la consulta.
@@ -374,6 +388,13 @@ haría que añadir museos nuevos costara solo lo nuevo. Es lo que más rendiría
 cara a seguir metiendo museos.
 
 **4. Rotar la contraseña de la base**, que pasó por una conversación.
+
+**Cabo suelto pequeño**, de las pruebas del 29 por la mañana: la Galería
+Nacional de Canadá (`Q1068063`) y la Galería de la Academia de Florencia
+(`Q10855544`) se reingirieron con las opciones por defecto para probar el panel,
+así que su checkpoint quedó al umbral 2 en vez de al 0. No se ha perdido ninguna
+obra —la ingesta solo actualiza—, pero el próximo `--all --everything` los
+rehará. Es el comportamiento correcto y no hay que tocar nada.
 
 ---
 
@@ -426,24 +447,67 @@ agosto dejó 6.546 líneas de log de las que ~6.400 eran `reintento N/M`.
 Filadelfia agotó sus cuatro reintentos y murió a las 19:17; el Met quedó cortado
 a mitad. Se supo catorce horas después, y porque alguien leyó el log a mano.
 
-Dos mitades. La primera es la urgente:
+Dos mitades. **La primera está hecha**; la segunda no.
 
-### 1. Ver la ingesta
+### 1. Ver la ingesta — HECHO el 29 de agosto (mañana)
 
-- **La ingesta escribe su estado en la base**, no en un fichero de texto:
-  tablas de ejecuciones y de pasos (museo, paso, inicio, fin, obras escritas,
-  error). El log de texto se queda para el detalle, no para saber cómo va.
-- **Vista en `/[lang]/admin`** que lea esas tablas: en qué museo va, cuánto
-  lleva, qué terminó y con qué números, qué falló y con qué error. Refresco
-  solo, sin recargar.
-- **Reintentos acotados y visibles**: al agotarlos, el paso queda en `failed`
-  con el motivo. Hoy el error se lo traga el log.
-- **Reanudable sola**: si el proceso muere, el siguiente arranque sabe por
-  dónde iba sin que nadie lea nada. El checkpoint por museo ya existe
-  (`.checkpoints/*.json`); lo que falta es el estado *dentro* de un museo.
-- **Lanzar y parar desde la pantalla**, no desde la terminal.
+Migración **0026**, `packages/ingest/src/run-log.ts` y
+`apps/web/app/[lang]/admin/ingesta/page.tsx`.
 
-### 2. Editar el catálogo a mano
+- **El estado vive en la base**: `ingest_runs` (una ejecución) e `ingest_steps`
+  (un museo dentro de ella, con sus cifras y su error). El log de texto se
+  queda para el detalle. Los totales de la ejecución van en un `jsonb` porque
+  son para leer; las cifras por las que se consulta están en `ingest_steps`.
+- **Pantalla en `/[lang]/admin/ingesta`**, enlazada desde el panel. Se refresca
+  sola cada 5 s **solo mientras hay algo corriendo** (`components/AutoRefresh`
+  llama a `router.refresh()`; no hay ruta de API nueva, así que sigue leyendo
+  con la sesión y sujeta a RLS).
+- **Se puede parar desde la pantalla.** `request_ingest_cancel()` levanta una
+  bandera que la ingesta mira **entre museos**, no dentro: cortar un museo a la
+  mitad lo deja sin checkpoint y habría que rehacerlo entero.
+- **Los reintentos son un número**, no 6.400 líneas: `retryCount()` en
+  `util/http.ts` y una columna por museo.
+
+**Lo que más costó acertar, y lo que hay que respetar si se toca:**
+
+*Un `running` no quiere decir vivo.* Un proceso que muere de golpe deja su fila
+diciendo `running` para siempre — exactamente la ceguera del 28. Por eso hay
+`heartbeat_at` y `reap_dead_runs()`, que cierra con el motivo lo que lleve diez
+minutos sin latir. La llaman la ingesta al arrancar y el panel al pintarse.
+
+*El latido dice «existo», no «avanzo».* Es de reloj, cada 30 s, y no de trabajo
+hecho. Se probó lo segundo y estaba mal: una consulta atascada pasa hasta 8 min
+entre reintentos, y el Met, con 2 h 37 min de museo, se habría dado por muerto a
+los diez minutos. **Un vigilante que mata al vigilado es peor que no tenerlo.**
+Si avanza o no se ve aparte, en las cifras del museo en curso, que suben lote a
+lote. Son dos preguntas y tienen dos respuestas.
+
+*Contar no puede tumbar la ingesta.* Si Supabase no acepta un `update` de
+progreso, se avisa **una vez** y se sigue; el resumen final recuerda que el
+panel se quedó ciego. Callar ahí reproduciría el problema que esto vino a
+arreglar.
+
+**Comprobado de verdad**, no solo compilado: un `anon` no ve una fila de estas
+tablas y un administrador las ve todas (sonda con el rol `authenticated` y su
+JWT, que es como consulta la página); ni el administrador puede escribirlas a
+mano —parar solo se pide por la función—; una ingesta real escribe su ejecución
+y sus museos; y el caso Filadelfia, simulado, deja `failed` con «el proceso
+murió sin decir nada: última señal de vida a las 19:33».
+
+**Lo que NO está hecho de esta mitad:**
+
+- **Lanzar desde la pantalla.** Parar sí; lanzar necesita un proceso que esté
+  escuchando, y eso es otra cosa que decidir (¿un servicio en la máquina? ¿una
+  función programada?).
+- **Reanudar sola dentro de un museo.** El checkpoint por museo ya existía; el
+  estado *dentro* de un museo se ve ahora, pero al reanudar se rehace entero.
+- El botón de parar está probado a nivel de función (`anon` rechazado con su
+  motivo, administrador aceptado); **no se ha ejercitado una parada en vivo**
+  con un barrido de varios museos.
+- Las filas de `ingest_runs`/`ingest_steps` no se borran nunca. Son diminutas
+  (~48 filas por barrido), pero si algún día molestan, la retención es trivial.
+
+### 2. Editar el catálogo a mano — PENDIENTE
 
 Formularios en el panel para **crear y corregir obras, artistas, museos y
 movimientos**. Esto ya estaba pedido en pequeño («alta manual de obras») y ahora

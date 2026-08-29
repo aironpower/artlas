@@ -16,6 +16,7 @@ import { enrichBatch } from './sources/museum-apis.js';
 import { DedupeIndex, mergeArtworks } from './normalize.js';
 import { IdCache, refreshCounters, upsertArtworks } from './db.js';
 import { classify } from './audit/gate.js';
+import type { RunLog } from './run-log.js';
 import type { CanonicalArtwork, IngestStats, MuseumSeed } from './types.js';
 
 const CHECKPOINT_DIR = '.checkpoints';
@@ -125,13 +126,30 @@ async function writeCheckpoint(
   );
 }
 
+/**
+ * Cómo acabó un museo, además de sus cifras.
+ *
+ * Existe porque el panel necesita distinguir tres finales que en las cifras se
+ * parecen: el museo que se saltó (ya estaba hecho), el que abortó, y el que
+ * escribió obras pero perdió lotes. Antes esa diferencia solo estaba en el
+ * texto que salía por consola, y un texto no se puede consultar.
+ */
+export interface MuseumOutcome {
+  stats: IngestStats;
+  /** Ya estaba hecho: no se tocó Wikidata siquiera. */
+  skipped: boolean;
+  /** Lo que lo tumbó, si lo hubo. */
+  error: Error | null;
+}
+
 export async function ingestMuseum(
   db: SupabaseClient | null,
   cache: IdCache | null,
   museum: MuseumSeed,
   dedupe: DedupeIndex,
   options: PipelineOptions,
-): Promise<IngestStats> {
+  log: RunLog | null = null,
+): Promise<MuseumOutcome> {
   const stats: IngestStats = {
     fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
     published: 0, pending: 0, rejected: 0, repaired: 0,
@@ -144,7 +162,7 @@ export async function ingestMuseum(
     if (done && done.minNotability <= options.minNotability && done.lost === 0) {
       console.log(`  ⏭  ${museum.name}: ya procesado (${done.count} obras). --force para rehacer.`);
       stats.skipped = done.count;
-      return stats;
+      return { stats, skipped: true, error: null };
     }
 
     if (done && done.lost > 0) {
@@ -164,14 +182,14 @@ export async function ingestMuseum(
   if (!institution) {
     console.warn(`  ✗ ${museum.name} (${museum.qid}): sin datos en Wikidata`);
     stats.errors++;
-    return stats;
+    return { stats, skipped: false, error: new Error('sin datos en Wikidata') };
   }
 
   if (institution.lat === undefined) {
     // Sin coordenadas la obra no puede salir en el mapa, que es el producto.
     console.warn(`  ✗ ${institution.name}: sin coordenadas, se omite`);
     stats.errors++;
-    return stats;
+    return { stats, skipped: false, error: new Error('sin coordenadas en Wikidata') };
   }
 
   console.log(`  → ${institution.name} (${institution.city ?? '?'}, ${institution.country ?? '?'})`);
@@ -218,6 +236,15 @@ export async function ingestMuseum(
     }
 
     batch = [];
+
+    /*
+     * El latido va aquí, por lote, y no solo al empezar y acabar el museo. Con
+     * lo segundo, el Met —dos horas y media él solo— pasaría dos horas sin dar
+     * señales y el vigilante lo daría por muerto a los diez minutos. De paso,
+     * las cifras del museo en curso suben a la vista del panel en vez de
+     * aparecer todas de golpe al final.
+     */
+    await log?.progress(stats);
   };
 
   /*
@@ -334,14 +361,22 @@ export async function ingestMuseum(
     `${enriched > 0 ? `, ${enriched} enriquecidas vía ${museum.api}` : ''}`,
   );
 
-  return stats;
+  return { stats, skipped: false, error: abortado };
+}
+
+/** Lo que devuelve un barrido completo: sus totales y si lo pararon. */
+export interface RunOutcome {
+  total: IngestStats;
+  /** Alguien pulsó «parar» en el panel y la ingesta salió por su propio pie. */
+  cancelled: boolean;
 }
 
 export async function ingestAll(
   db: SupabaseClient | null,
   museums: MuseumSeed[],
   options: PipelineOptions,
-): Promise<IngestStats> {
+  log: RunLog | null = null,
+): Promise<RunOutcome> {
   const cache = db ? new IdCache(db) : null;
   const dedupe = new DedupeIndex();
 
@@ -351,11 +386,26 @@ export async function ingestAll(
     lostBatches: 0, lostWorks: 0,
   };
 
+  let cancelled = false;
+
   for (const [i, museum] of museums.entries()) {
+    /*
+     * Se pregunta ANTES de empezar el museo, no dentro. Cortar a mitad de un
+     * museo lo deja sin checkpoint y el siguiente barrido lo rehace entero:
+     * parar «ya mismo» costaría más trabajo del que ahorra.
+     */
+    if (await log?.cancelPedido()) {
+      console.log(`\n■ Parada pedida desde el panel. Se deja tras ${i} museo(s).`);
+      cancelled = true;
+      break;
+    }
+
     console.log(`\n[${i + 1}/${museums.length}] ${museum.name}`);
+    await log?.startStep(i + 1, museum);
 
     try {
-      const stats = await ingestMuseum(db, cache, museum, dedupe, options);
+      const { stats, skipped, error } = await ingestMuseum(db, cache, museum, dedupe, options, log);
+
       total.fetched += stats.fetched;
       total.inserted += stats.inserted;
       total.updated += stats.updated;
@@ -367,12 +417,32 @@ export async function ingestAll(
       total.repaired += stats.repaired;
       total.lostBatches += stats.lostBatches;
       total.lostWorks += stats.lostWorks;
+
+      await log?.finishStep(stats, { skipped, error });
     } catch (err) {
-      // Un museo que falla no debe tumbar una ingesta de horas.
+      /*
+       * Un museo que falla no debe tumbar una ingesta de horas. Lo que sí
+       * cambia respecto a antes: el fallo queda escrito en su fila con el
+       * motivo, en vez de vivir en una línea de log que nadie va a leer.
+       */
       console.error(`  ✗ ${museum.name}: ${(err as Error).message}`);
       total.errors++;
+      await log?.finishStep({ ...SIN_CIFRAS, errors: 1 }, { error: err as Error });
     }
   }
 
-  return total;
+  return { total, cancelled };
 }
+
+/**
+ * Cifras a cero.
+ *
+ * Para cerrar el paso de un museo que ni llegó a devolverlas, y para que el
+ * resumen de una ejecución que se cae antes de empezar sea un cero honesto en
+ * vez de un hueco.
+ */
+export const SIN_CIFRAS: IngestStats = {
+  fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+  published: 0, pending: 0, rejected: 0, repaired: 0,
+  lostBatches: 0, lostWorks: 0,
+};

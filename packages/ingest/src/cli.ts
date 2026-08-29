@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { createDb, refreshCounters } from './db.js';
-import { DEFAULT_OPTIONS, ingestAll, type PipelineOptions } from './pipeline.js';
+import { DEFAULT_OPTIONS, ingestAll, SIN_CIFRAS, type PipelineOptions } from './pipeline.js';
+import { RunLog } from './run-log.js';
+import { retryCount } from './util/http.js';
 import type { MuseumSeed } from './types.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -194,7 +196,44 @@ async function main() {
   );
 
   const started = Date.now();
-  const stats = await ingestAll(db, museums, options);
+
+  /*
+   * En simulación no se abre ejecución: el panel enseña lo que le PASA al
+   * catálogo, y un ensayo que no escribe nada solo ensuciaría la lista con
+   * filas que no significan nada.
+   */
+  const log = db ? await RunLog.open(db, process.argv.slice(2).join(' '), museums.length) : null;
+
+  /*
+   * Si esto revienta —o si alguien pulsa Ctrl+C—, la fila de la ejecución NO
+   * puede quedarse diciendo `running`: ese es exactamente el estado en el que
+   * se quedó la del 28 de agosto, y por el que el panel habría dicho «va bien»
+   * durante catorce horas. Se cierra con el motivo, se hunda por donde se
+   * hunda.
+   */
+  let stats = SIN_CIFRAS;
+
+  const cerrarPorLaFuerza = async (motivo: string) => {
+    await log?.close('failed', stats, new Error(motivo));
+  };
+
+  const alRecibirSenal = () => {
+    console.log('\n■ Interrumpida a mano.');
+    void log?.close('cancelled', stats).finally(() => process.exit(130));
+  };
+  process.once('SIGINT', alRecibirSenal);
+  process.once('SIGTERM', alRecibirSenal);
+
+  let cancelled = false;
+
+  try {
+    const outcome = await ingestAll(db, museums, options, log);
+    stats = outcome.total;
+    cancelled = outcome.cancelled;
+  } catch (err) {
+    await cerrarPorLaFuerza((err as Error).message);
+    throw err;
+  }
 
   // Los contadores por museo/artista/movimiento se recalculan una sola vez al
   // final: son tres UPDATE de tabla completa y hacerlos por lote sería absurdo.
@@ -203,6 +242,12 @@ async function main() {
     await refreshCounters(db);
     await analyzeTables();
   }
+
+  await log?.close(
+    cancelled ? 'cancelled' : stats.errors > 0 ? 'failed' : 'done',
+    stats,
+    stats.errors > 0 ? new Error(`${stats.errors} museo(s) con error`) : null,
+  );
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(0);
 
@@ -217,6 +262,7 @@ async function main() {
   Corregidas    ${stats.repaired}
   Errores       ${stats.errors}
   Obras perdidas ${stats.lostWorks}${stats.lostWorks > 0 ? ` en ${stats.lostBatches} lotes` : ''}
+  Reintentos    ${retryCount()}
   Tiempo        ${elapsed}s
 ──────────────────────────────────────────`);
 
@@ -230,6 +276,17 @@ async function main() {
   if (stats.pending > 0) {
     console.log(`  ${stats.pending} obras guardadas esperando datos. No se ven en la app todavía.`);
     console.log('  Cuando les llegue imagen o entren en dominio público, `npm run promote` las publica.');
+    console.log();
+  }
+
+  /*
+   * Si el panel se quedó ciego hay que decirlo AQUÍ, en el resumen, y no solo
+   * en el momento del fallo: cuando esto se lee, el aviso de hace tres horas
+   * está enterrado bajo mil líneas. Una ingesta que corrió sin dejar rastro
+   * consultable es media ingesta.
+   */
+  if (log?.ciego) {
+    console.log('  ⚠ El estado NO se pudo escribir en la base: esta ejecución no sale en el panel.');
     console.log();
   }
 

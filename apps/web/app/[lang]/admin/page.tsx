@@ -56,6 +56,14 @@ export default async function AdminPage({ params }: Props) {
       </header>
 
       <section>
+        <h2>La ingesta</h2>
+        <p className="muted small" style={{ margin: '10px 0 0' }}>
+          <Link href={`${path(lang, 'admin')}/ingesta`}>Ver cómo va</Link>
+          {' · '}en qué museo está, qué terminó y qué falló.
+        </p>
+      </section>
+
+      <section style={{ paddingTop: 26 }}>
         <h2>El catálogo</h2>
         <ul className="facts">
           <Fact k="Publicadas" v={formatNumber(lang, porEstado.get('published') ?? 0)} />
