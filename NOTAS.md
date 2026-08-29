@@ -1,6 +1,6 @@
 # Notas de trabajo
 
-Estado al 29 de agosto de 2026 (mediodía) y lo siguiente a hacer.
+Estado al 29 de agosto de 2026 (tarde) y lo siguiente a hacer.
 
 ---
 
@@ -213,7 +213,30 @@ es de pago.
 
 ---
 
-## La Galería Nacional de Arte (Q214867): la causa era otra
+## HECHO: la Galería Nacional de Arte entró entera (127.244 obras)
+
+**Terminada el 29 de agosto de 2026 a las 18:40**, tras 5 h 22 min, pedida
+desde la web y sin nadie delante. **0 obras perdidas, 0 lotes fallidos**, 160
+reintentos en total. Son **48 de 48 museos**: el mapa ya no tiene huecos.
+
+El catálogo queda en **269.159 obras** (125.367 publicadas, 143.790 esperando
+datos), 21.619 artistas y **348,1 MB de los 500** del plan gratuito.
+
+**Y el espacio salió mucho mejor de lo temido.** Medido con muestras de 50
+minutos: **0,89 KB por obra**, no los 1,45 estimados, porque tres de cada
+cuatro obras de la Galería entran como pendientes y esas no llevan
+traducciones. La primera proyección —hecha sobre los primeros minutos— decía
+641 MB y era falsa: las obras de esos minutos ya estaban en la base de los
+intentos fallidos de la noche anterior, así que se medía el coste de
+actualizar filas, no el de crearlas. **Nunca proyectar sobre el arranque de un
+proceso.**
+
+Quedan unos 150 MB de margen. Con este coste por obra, sitio para otras
+~170.000.
+
+---
+
+## Cómo se arregló la Galería Nacional: la causa era otra
 
 **Resuelto el 29 de agosto de 2026 por la tarde**, y la causa apuntada abajo
 era falsa. Se deja el registro porque el error de diagnóstico es instructivo.

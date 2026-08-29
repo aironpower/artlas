@@ -95,7 +95,17 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
 
       // El tamaño crece con la colección, pero por raíz cuadrada: si fuera
       // lineal, el Louvre taparía media Francia.
-      const size = Math.min(46, 22 + Math.sqrt(pin.artwork_count) * 1.6);
+      /*
+       * Todas del mismo tamaño.
+       *
+       * Antes el lado crecía con la raíz del número de obras, para que se
+       * viera de un vistazo dónde hay más. Con el catálogo pasado de 260.000
+       * eso dejó de funcionar: casi todas las grandes chocaban contra el tope
+       * de 46 px y se leían igual, así que el tamaño costaba espacio sin
+       * informar. La cifra dentro ya dice cuánto, y con todas iguales el mapa
+       * queda más limpio y se solapan menos.
+       */
+      const size = 36;
       el.style.width = `${size}px`;
       el.style.height = `${size}px`;
       /*
