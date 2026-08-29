@@ -64,6 +64,14 @@ export default async function AdminPage({ params }: Props) {
       </section>
 
       <section style={{ paddingTop: 26 }}>
+        <h2>Corregir a mano</h2>
+        <p className="muted small" style={{ margin: '10px 0 0' }}>
+          <Link href={`${path(lang, 'admin')}/corregir`}>Buscar una obra o un artista</Link>
+          {' · '}lo que corrijas queda defendido de la ingesta.
+        </p>
+      </section>
+
+      <section style={{ paddingTop: 26 }}>
         <h2>El catálogo</h2>
         <ul className="facts">
           <Fact k="Publicadas" v={formatNumber(lang, porEstado.get('published') ?? 0)} />

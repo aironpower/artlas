@@ -248,6 +248,45 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   white-space: pre; color: var(--muted);
 }
 
+/* --- Corregir una ficha a mano ------------------------------------------- */
+
+.ficha { display: grid; gap: 16px 18px; grid-template-columns: repeat(12, 1fr); padding: 20px 0 0; }
+.ficha-campo { grid-column: span 12; min-width: 0; }
+@media (min-width: 720px) {
+  .ancho-corto { grid-column: span 3; }
+  .ancho-medio { grid-column: span 6; }
+  .ancho-largo { grid-column: span 12; }
+}
+
+.ficha-campo label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+.ficha-campo textarea {
+  width: 100%; padding: 9px 13px; font: inherit; font-size: 0.95rem;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); resize: vertical;
+}
+.ficha-campo .pie { margin: 4px 0 0; font-size: 0.78rem; color: var(--muted); }
+
+/*
+ * «Defendido»: este campo lo corrigió una persona y la ingesta ya no lo pisa.
+ * Va pegado a la etiqueta del campo, no en una leyenda al final, porque la
+ * pregunta que responde —«¿por qué esto no cambia solo?»— se hace mirando ese
+ * campo concreto.
+ */
+.defendido {
+  margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+.soltar {
+  display: flex !important; gap: 6px; align-items: center;
+  margin-top: 5px; font-size: 0.78rem;
+}
+
+.aviso { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0 0; font-size: 0.9rem; }
+.aviso-bien { background: color-mix(in srgb, var(--muted) 12%, transparent); color: var(--text); }
+.aviso-mal { background: var(--accent-soft); color: var(--accent); }
+
 .login { max-width: 420px; margin: 60px auto; text-align: center; }
 .login form { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
 

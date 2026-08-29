@@ -255,6 +255,12 @@ falta que la consulta de un tirón falle, y falla unas veces sí y otras no—. 
 estuviera mal, el peor caso es el de siempre: museo abortado y rehecho al
 siguiente barrido.
 
+**Ojo con el espacio, medido en marcha.** Con las primeras 6.897 obras dentro,
+la base pasó de 215,6 a 239 MB: **3,4 KB por obra**, no los 1,45 que se
+estimaron. Si el ritmo se mantiene, la Galería entera son ~410 MB y el total
+pasaría de 500. Hay que confirmarlo con más muestra antes de decidir nada, pero
+si se confirma, el museo no cabe entero y habrá que elegir qué parte entra.
+
 **Ojo con los contadores.** `refreshCounters` son tres UPDATE de tabla completa
 sobre 148.000 filas y ya rozan el `statement_timeout`; con la Galería dentro
 serían 270.000. Ya no tumban la ingesta (se avisa y se sigue), pero habrá que
@@ -593,11 +599,60 @@ bucle que lo relanza a los 10 s— porque `reanudar-ingesta.cmd` intentó ser
 listo con PowerShell y nunca llegó a lanzar un barrido. Este se probó
 lanzándolo y comprobando que el proceso existe.
 
-### 2. Editar el catálogo a mano — PENDIENTE
+### 2. Editar el catálogo a mano — HECHO el 29 de agosto (tarde)
 
-Es lo único que queda de la aplicación. Añadir un museo entero ya se hace desde
-la web; lo que falta es **crear y corregir obras, artistas y movimientos uno a
-uno**.
+Migraciones **0028-0031**, `/[lang]/admin/corregir` y sus dos fichas.
+
+**La regla, que era lo que había que decidir antes de escribir nada: la persona
+gana en el campo que ha tocado, y solo en ese. Wikidata gana en todo lo demás.**
+No es un término medio cobarde: son 148.000 obras y nadie va a mantenerlas a
+mano, así que la fuente tiene que seguir mandando por defecto; pero una
+corrección hecha a conciencia no puede deshacerse sola en el siguiente barrido,
+porque eso convierte los formularios en trabajo que se tira.
+
+Cómo se hace cumplir, y dónde: **en un disparador de la base**, no en la
+ingesta. Podría resolverse leyendo `locked_fields` antes de cada upsert, pero
+entonces la regla dependería de que todo el que escriba se acuerde. Así la base
+restaura el valor corregido venga de donde venga.
+
+- `artworks.locked_fields` y `artists.locked_fields`: los campos tocados a mano.
+- **El estado va aparte, por `status_locked` (0008)**, que ya existía con el
+  mismo razonamiento. Un concepto, un guardián: tener dos gobernando el mismo
+  campo es la clase de duplicidad que dentro de seis meses no sabe nadie cuál
+  manda.
+- Se guarda **solo lo que ha cambiado de verdad**. Si se enviaran los diecisiete
+  campos, abrir el formulario y darle a guardar congelaría la ficha entera
+  frente a Wikidata.
+- Cada campo defendido lo dice en la propia ficha, con una casilla al lado para
+  soltarlo. Una regla invisible se descubre el día que algo no cambia y nadie
+  entiende por qué.
+
+**Comprobado en el navegador**, no solo en SQL: crear una obra a mano, corregir
+su título, que una escritura de la ingesta por encima NO la pise, soltar un
+campo y que la fuente vuelva a mandar en él, corregir dos veces el mismo campo
+(que era el caso que habría fallado en silencio), y que el anónimo y los campos
+que no tocan queden rechazados.
+
+**Tres tropiezos que dejaron migración:**
+
+- 0028 casteaba todo a `text` y `year_start` es `integer`: no se podía corregir
+  ningún campo numérico. Ahora el tipo se le pregunta al catálogo (0029).
+- 0028 listaba campos escritos de memoria —`title_es`, `genre`, `description`,
+  `bio`— que no existen. Los nombres reales, en 0030.
+- El buscador hacía `title ilike '%…%'` desde la web: **25-34 s y fallo
+  silencioso**. El índice `artworks_title_trgm` no servía —está sobre
+  `immutable_unaccent(title)` y además es parcial, solo publicadas— así que era
+  un escaneo secuencial que se pasaba de los 3 s y devolvía `null`, que la
+  pantalla pintaba como «no hay nada». Ahora va por función indexada (0031) y
+  los fallos se enseñan.
+
+**Límite conocido y a la espera de arreglo**: por título no se llega a las obras
+que esperan datos, porque se guardan sin traducciones (130 de 71.244 las
+tienen). A esas se llega por su número de ficha o su QID, y la pantalla lo dice.
+**El arreglo**: cambiar `artworks_title_trgm` —parcial y que **nunca se ha
+usado**, `idx_scan = 0`, 12 MB— por uno completo, ~40 MB. No se hizo en el
+momento porque había una ingesta de 121.000 obras escribiendo y construirlo la
+habría frenado.
 
 Formularios en el panel para **crear y corregir obras, artistas, museos y
 movimientos**. Esto ya estaba pedido en pequeño («alta manual de obras») y ahora
