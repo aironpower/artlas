@@ -51,7 +51,7 @@ export default function NearMe({ lang }: { lang: Lang }) {
   return (
     <section style={{ padding: '4px 0 20px' }}>
       {state.status === 'idle' && (
-        <button className="btn btn-primary" onClick={locate}>📍 {t(lang, 'nearMe')}</button>
+        <button className="btn btn-primary" onClick={locate}>{t(lang, 'nearMe')}</button>
       )}
 
       {state.status === 'locating' && <p className="muted">{t(lang, 'locating')}</p>}

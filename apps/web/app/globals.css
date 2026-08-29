@@ -1,25 +1,24 @@
 /* Artlas — hoja de estilo única. La app es pequeña y visual; un sistema de
    tokens en CSS puro evita arrastrar una dependencia de estilos entera.
 
-   Sin color, a propósito. En una pared de museo lo único que tiene color son
-   los cuadros, y aquí pasa lo mismo: la única fuente de color de la pantalla
-   son las obras. Un acento terracota compitiendo con un Rothko es ruido.
+   Casi sin color. La pantalla es papel —blanco roto, no blanco de pantalla— y
+   tinta; el color lo ponen las obras. Pero queda UN acento, un burdeos que
+   tira a naranja, y tiene un trabajo concreto: señalar dónde se pulsa y dónde
+   está algo en el mapa. Al no haber ningún otro color compitiendo, ese rojo
+   funciona como la línea roja del suelo de un museo — se sigue sin pensarlo.
 
-   Por eso `--accent` no es un color sino la tinta: negro sobre blanco, y del
-   revés en modo oscuro. Todo lo que antes se distinguía por tono ahora se
-   distingue por peso, contraste o posición, que es como funciona la
-   señalética de un museo. */
+   La regla para no volver a llenar esto de color: el acento marca acción o
+   posición. Nunca decora. */
 
 :root {
-  --bg: #ffffff;
+  --bg: #faf8f5;
   --surface: #ffffff;
-  --border: #e2e2e2;
-  --text: #0a0a0a;
-  --muted: #6e6e6e;
+  --border: #e6e1db;
+  --text: #17150f;
+  --muted: #6b645a;
 
-  /* La tinta. No es un color: es lo contrario del fondo. */
-  --accent: #0a0a0a;
-  --accent-soft: #f0f0f0;
+  --accent: #a33b1c;
+  --accent-soft: #f5eae4;
 
   /* Casi nada: una línea basta para separar dos superficies blancas. */
   --shadow: none;
@@ -31,13 +30,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0a0a0a;
-    --surface: #111111;
-    --border: #2b2b2b;
-    --text: #f2f2f2;
-    --muted: #9b9b9b;
-    --accent: #f2f2f2;
-    --accent-soft: #1c1c1c;
+    --bg: #14120f;
+    --surface: #1b1815;
+    --border: #302b25;
+    --text: #f2eee7;
+    --muted: #a09689;
+    --accent: #e0764f;
+    --accent-soft: #2b1f19;
     --shadow: none;
   }
 }
@@ -48,7 +47,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Montserrat la carga `next/font` en el layout y deja aquí su variable.
+     El respaldo del sistema va detrás por si la fuente no llega. */
+  font-family: var(--fuente), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -107,10 +108,10 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
   cursor: pointer; white-space: nowrap;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.btn:hover { background: var(--accent); color: var(--bg); }
+.btn:hover { background: var(--accent); color: #fff; }
 
-.btn-primary { background: var(--accent); color: var(--bg); }
-.btn-primary:hover { background: var(--muted); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--text); }
 
 /* Se marca dónde está el foco, que sin bordes es más fácil de perder. */
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -143,12 +144,19 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
 .map { width: 100%; height: min(72vh, 640px); border-radius: var(--radius);
        border: 1px solid var(--border); overflow: hidden; }
 
+/*
+ * La chincheta: del color del acento y sin cerco blanco.
+ *
+ * El cerco estaba para despegarla de un mapa lleno de colores. Con el mapa en
+ * gris ya no hace falta y solo engordaba el círculo; el contraste lo pone
+ * ahora el único color de la pantalla.
+ */
 .pin {
   display: grid; place-items: center;
-  background: var(--accent); color: var(--bg);
-  border: 2px solid var(--surface); border-radius: 999px;
-  font-size: 0.75rem; font-weight: 700; cursor: pointer;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  background: var(--accent); color: #fff;
+  border: 0; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
 
 /* Mapa por artista: un círculo por punto, en su posición exacta. Cuando varias
@@ -156,9 +164,9 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
 .dot {
   display: grid; place-items: center;
   width: 13px; height: 13px; padding: 0;
-  background: var(--accent); color: var(--bg);
-  border: 2px solid var(--surface); border-radius: 999px;
-  font: inherit; font-size: 0.72rem; font-weight: 700; line-height: 1;
+  background: var(--accent); color: #fff;
+  border: 0; border-radius: 999px;
+  font: inherit; font-size: 0.7rem; font-weight: 700; line-height: 1;
   cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
 }
 .dot-many { width: 28px; height: 28px; }
@@ -239,7 +247,7 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
  * maciza y lo que no, en gris. Es el mismo orden de atención que daba el rojo,
  * conseguido con lo único que queda cuando quitas el tono.
  */
-.sev-error   { background: var(--accent); color: var(--bg); }
+.sev-error   { background: var(--accent); color: #fff; }
 .sev-warning { background: var(--accent-soft); color: var(--text); }
 .sev-info    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 
@@ -249,7 +257,7 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
  * ingesta viva y una terminada hace tres horas se leían igual, que es la
  * confusión que esta pantalla vino a quitar.
  */
-.sev-live { background: var(--accent); color: var(--bg); }
+.sev-live { background: var(--accent); color: #fff; }
 
 @media (prefers-reduced-motion: no-preference) {
   .sev-live { animation: latido 1.8s ease-in-out infinite; }

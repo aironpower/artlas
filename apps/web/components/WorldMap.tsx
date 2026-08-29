@@ -113,7 +113,20 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
       const size = Math.min(46, 22 + Math.sqrt(pin.artwork_count) * 1.6);
       el.style.width = `${size}px`;
       el.style.height = `${size}px`;
-      el.textContent = pin.artwork_count > 999 ? '999+' : String(pin.artwork_count);
+      /*
+       * En corto: «14 k», no «999+».
+       *
+       * El tope de 999 se puso cuando el museo más grande tenía cuatro cifras.
+       * Con 200.000 obras en el catálogo, casi todas las chinchetas grandes
+       * decían lo mismo y el número dejaba de informar: un museo de 1.000
+       * obras y otro de 21.000 se leían igual. El tamaño del círculo ya dice
+       * «grande»; el número tiene que decir CUÁNTO.
+       */
+      el.textContent = pin.artwork_count < 1000
+        ? String(pin.artwork_count)
+        : `${(pin.artwork_count / 1000).toLocaleString(lang, {
+            maximumFractionDigits: pin.artwork_count < 10_000 ? 1 : 0,
+          })} k`;
       el.setAttribute(
         'aria-label',
         `${pin.name}, ${formatNumber(lang, pin.artwork_count)} ${t(lang, 'artworks')}`,

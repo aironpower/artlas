@@ -4,6 +4,7 @@ import { searchArtworks, listMovements, listCountries, listCities } from '@/lib/
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import Paginacion, { leerPagina } from '@/components/Paginacion';
+import SelectQueEnvia from '@/components/SelectQueEnvia';
 
 export const revalidate = 3600;
 
@@ -94,12 +95,14 @@ export default async function SearchPage({ params, searchParams }: Params) {
         </Field>
 
         <Field label={t(lang, 'country')}>
-          <select name="pais" defaultValue={sp.pais ?? ''}>
+          {/* Se aplica al elegir: de él cuelga la lista de ciudades, y
+              esperar al botón hacía parecer que el subfiltro no funcionaba. */}
+          <SelectQueEnvia name="pais" defaultValue={sp.pais ?? ''}>
             <option value="">—</option>
             {countries.map((c) => (
               <option key={c.code} value={c.code}>{c.name} ({c.count})</option>
             ))}
-          </select>
+          </SelectQueEnvia>
         </Field>
 
         {/*
