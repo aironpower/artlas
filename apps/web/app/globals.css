@@ -286,6 +286,38 @@ select:disabled { color: var(--muted); background: var(--accent-soft); cursor: n
   white-space: pre; color: var(--muted);
 }
 
+/* --- La llegada de una vista nueva ---------------------------------------- */
+
+/*
+ * Corto y sin desplazamiento lateral, a propósito.
+ *
+ * 160 ms es el umbral por debajo del cual una transición se siente parte del
+ * cambio y no una espera añadida; y el movimiento es de 4 px hacia arriba, no
+ * de media pantalla, porque lo que se busca es que el contenido «aterrice», no
+ * que desfile. Una animación de entrada larga se nota la primera vez y estorba
+ * las mil siguientes.
+ *
+ * `translateY` y `opacity` no provocan recálculo de maquetación, así que esto
+ * no puede mover nada de sitio ni pelearse con los esqueletos.
+ *
+ * Y sin `fill-mode`, que es lo que importa: con `both` el contenido se quedaba
+ * a 0,4 de opacidad cuando la animación no llegaba a completarse —se vio
+ * midiéndolo, no mirándolo—. El estado normal del elemento es visible; la
+ * animación solo lo altera mientras corre. **Nada que haya que leer puede
+ * depender de que una animación termine bien.**
+ */
+.entrada { animation: entrar 160ms ease-out; }
+
+@keyframes entrar {
+  from { opacity: 0.4; transform: translateY(4px); }
+  to   { opacity: 1;   transform: none; }
+}
+
+/* Quien ha pedido que no le muevan la pantalla, no se la movemos. */
+@media (prefers-reduced-motion: reduce) {
+  .entrada { animation: none; }
+}
+
 /* --- Mientras la página se trae sus datos ---------------------------------- */
 
 /*
