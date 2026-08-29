@@ -228,6 +228,26 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .acciones { display: flex; gap: 8px; flex-shrink: 0; }
 .acciones .btn { padding: 5px 10px; font-size: 0.83rem; }
 
+/* Encargar trabajos y ver su salida en vivo. */
+.campo {
+  padding: 5px 9px; font: inherit; font-size: 0.85rem;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); width: 9em;
+}
+.campo:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/*
+ * La salida del proceso, en vivo. Con scroll propio y no en el flujo de la
+ * página: son las últimas líneas de algo que puede escupir miles, y sin el
+ * `overflow` una línea larga empujaría el ancho de toda la pantalla.
+ */
+.salida {
+  margin: 8px 0 0; padding: 9px 11px; max-height: 220px;
+  overflow: auto; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; font-size: 0.78rem; line-height: 1.5;
+  white-space: pre; color: var(--muted);
+}
+
 .login { max-width: 420px; margin: 60px auto; text-align: center; }
 .login form { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
 

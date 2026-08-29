@@ -22,7 +22,8 @@
     "promote": "tsx --env-file=../../.env src/promote.ts",
     "fill-images": "tsx --env-file=../../.env src/fill-images.ts",
     "fix-artists": "tsx --env-file=../../.env src/fix-artists.ts",
-    "refresh": "tsx --env-file=../../.env src/refresh-counters.ts"
+    "refresh": "tsx --env-file=../../.env src/refresh-counters.ts",
+    "worker": "tsx --env-file=../../.env src/worker.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

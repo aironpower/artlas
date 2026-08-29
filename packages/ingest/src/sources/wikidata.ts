@@ -299,16 +299,118 @@ async function* listWorkQids(
   const notabilityClause = curated
     ? `?work wikibase:sitelinks ?sitelinks . FILTER(?sitelinks >= ${minNotability})`
     : '';
-  const ordering = curated ? 'ORDER BY DESC(?sitelinks) ?work' : 'ORDER BY ?work';
 
-  while (total < hardLimit) {
-    const query = `
-      SELECT DISTINCT ?work ${curated ? '?sitelinks' : ''} WHERE {
+  const cuerpo = `
         VALUES ?holder { ${holderValues} }
         { ?work wdt:P195 ?holder } UNION { ?work wdt:P276 ?holder }
         VALUES ?class { ${WORK_CLASSES} }
         ?work wdt:P31 ?class .
-        ${notabilityClause}
+        ${notabilityClause}`;
+
+  /*
+   * Sin umbral de notoriedad NO se ordena, y por eso tampoco se pagina: se
+   * pide todo de una vez.
+   *
+   * Medido el 29 de agosto de 2026 contra la Galería Nacional de Arte, el
+   * museo que llevaba dos días sin entrar. La hipótesis que se traía —OFFSET
+   * profundo, o demasiados titulares— era falsa: partir la consulta por
+   * titulares o por clase no arreglaba nada, porque **el coste era el
+   * `ORDER BY`**. La misma consulta, sobre los mismos 37 titulares:
+   *
+   *     con ORDER BY ?work ........  60 s y 504
+   *     sin ORDER BY ..............  1,0 s y 121.331 obras
+   *
+   * Tiene sentido: ordenar un DISTINCT obliga a materializar TODAS las obras
+   * antes de devolver las primeras 500, así que la primera página cuesta lo
+   * mismo que el museo entero. Y ese orden solo estaba ahí para que el OFFSET
+   * fuera estable entre páginas. Sin OFFSET no hace falta orden, y sin orden
+   * el museo entero cabe en una consulta de un segundo.
+   *
+   * Con umbral de notoriedad se sigue ordenando y paginando: ahí el orden no
+   * es un detalle de paginación, es lo que hace que al cortar por `limit`
+   * entre lo más conocido y no lo alfabéticamente primero.
+   *
+   * ---
+   *
+   * Y si de un tirón no cabe, en rodajas. **WDQS corta las respuestas
+   * grandes**: los 121.331 QID de la Galería Nacional ocupan 14,4 MB en JSON
+   * y llegaron truncados los cinco intentos. Entonces se reparte el museo en
+   * diez rodajas por el último dígito del QID —exhaustivas y disjuntas por
+   * construcción, porque un QID siempre acaba en 0-9— de unas 12.000 obras y
+   * 1,5 MB cada una, treinta veces por debajo del tope.
+   *
+   * Primero se intenta de un tirón porque para 47 de los 48 museos basta y es
+   * una consulta en vez de diez; las rodajas son el plan B, y quién las
+   * necesita lo dice el propio fallo.
+   *
+   * **Por qué JSON y no TSV**, que ocupa un tercio y habría cabido: porque un
+   * JSON cortado no se puede parsear y el fallo SE VE, mientras que un TSV
+   * cortado parece una respuesta corta y correcta. Se midió: de tres intentos
+   * en TSV, uno devolvió 72.400 de las 121.331 filas sin dar el menor error.
+   * Un formato que pierde datos en silencio no vale por compacto que sea.
+   */
+  if (!curated) {
+    const pedir = async (filtro: string, etiqueta: string): Promise<string[]> => {
+      const filas = await sparql(
+        `SELECT DISTINCT ?work WHERE {${cuerpo}${filtro}
+      } LIMIT ${hardLimit}`,
+        etiqueta,
+      );
+      return filas.map((r) => qid(val(r, 'work'))).filter((q): q is string => Boolean(q));
+    };
+
+    let qids: string[] = [];
+
+    try {
+      qids = await pedir('', 'enumerar de un tirón');
+    } catch (err) {
+      console.warn(
+        `     ⚠ no cabe de un tirón (${(err as Error).message.slice(0, 60)}); se parte en diez rodajas`,
+      );
+
+      const buenas: number[] = [];
+
+      for (const digito of '0123456789') {
+        try {
+          const rodaja = await pedir(
+            `
+        FILTER(STRENDS(STR(?work), "${digito}"))`,
+            `enumerar rodaja ${digito}`,
+          );
+          qids.push(...rodaja);
+          buenas.push(rodaja.length);
+        } catch (e) {
+          if (!onPageError) throw e;
+
+          /*
+           * Cuántas obras se pierden con la rodaja: no se sabe —de ellas no
+           * llegamos a conocer ni el QID— así que se estima con la media de
+           * las que sí volvieron. Es una estimación y se dice que lo es, pero
+           * cualquier número positivo cumple lo que de verdad importa: marcar
+           * el museo como incompleto para que el próximo barrido lo rehaga.
+           */
+          const estimado = buenas.length > 0
+            ? Math.round(buenas.reduce((a, b) => a + b, 0) / buenas.length)
+            : pageSize;
+
+          onPageError(e as Error, estimado);
+        }
+      }
+    }
+
+    // Se entrega en trozos del tamaño de página para que la hidratación siga
+    // trabajando por lotes, como antes.
+    for (let i = 0; i < qids.length && i < hardLimit; i += pageSize) {
+      yield qids.slice(i, Math.min(i + pageSize, hardLimit));
+    }
+    return;
+  }
+
+  const ordering = 'ORDER BY DESC(?sitelinks) ?work';
+
+  while (total < hardLimit) {
+    const query = `
+      SELECT DISTINCT ?work ?sitelinks WHERE {${cuerpo}
       }
       ${ordering}
       LIMIT ${pageSize} OFFSET ${offset}`;

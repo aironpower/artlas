@@ -11,12 +11,12 @@ completos, 214 MB de los 500 del plan gratuito.
 
 **Lo que Manuel quiere que se haga, por orden:**
 
-1. **La aplicación de ingesta.** La primera mitad —**ver la ingesta**— está
-   hecha el 29 de agosto por la mañana: el estado vive en la base y se mira en
-   `/es/admin/ingesta`. Queda la segunda: **formularios** para crear y corregir
-   obras, artistas, museos y movimientos a mano, y **lanzar** la ingesta desde
-   la pantalla (parar ya se puede). Sección **LA APLICACIÓN DE INGESTA**, con
-   las tres cosas que hay que decidir antes de escribir el primer formulario.
+1. **La aplicación de ingesta.** Hecho el 29 de agosto: ver la ingesta en vivo,
+   y **pedir y parar los trabajos desde la web**. Arranca el trabajador
+   (`trabajador.cmd`, doble clic) y todo se maneja desde `/es/admin/ingesta`.
+   Queda la segunda mitad: **formularios** para crear y corregir obras,
+   artistas y museos a mano. Sección **LA APLICACIÓN DE INGESTA**, con las tres
+   cosas que hay que decidir antes de escribir el primer formulario.
 
 2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
    está medido y el arreglo identificado —partir la consulta por titulares de
@@ -213,7 +213,56 @@ es de pago.
 
 ---
 
-## PENDIENTE: la Galería Nacional de Arte (Q214867) no entra
+## La Galería Nacional de Arte (Q214867): la causa era otra
+
+**Resuelto el 29 de agosto de 2026 por la tarde**, y la causa apuntada abajo
+era falsa. Se deja el registro porque el error de diagnóstico es instructivo.
+
+**No era el `OFFSET` profundo ni los 37 titulares: era el `ORDER BY ?work`.**
+La misma consulta, sobre los mismos titulares:
+
+```
+  con ORDER BY ?work ........  60 s y 504
+  sin ORDER BY ..............  1,0 s y 121.331 obras
+```
+
+Ordenar un `DISTINCT` obliga a materializar el museo entero antes de devolver
+las primeras 500 filas, así que la primera página costaba lo mismo que todo el
+museo. Y ese orden solo estaba para que el `OFFSET` fuera estable. Sin paginar,
+sobra. Partir por titulares —el arreglo que estaba apuntado como candidato— no
+servía: se midió y un solo titular seguía tardando 36,8 s.
+
+**El museo tiene 121.331 obras**, cinco veces el Met y el mayor de la semilla
+con diferencia. Manuel decidió meterlo entero y medir el espacio a mitad. Al
+ritmo actual (~1,45 KB/obra) serían ~175 MB y la base pasaría de 215 a ~390 de
+los 500; las que no traen imagen son más baratas, así que es el peor caso.
+
+**Segundo tropiezo, ya con el arreglo puesto: WDQS corta las respuestas
+grandes.** Los 121.331 QID ocupan 14,4 MB en JSON y llegaron truncados los
+cinco intentos; la ingesta abortó. De ahí el plan B: si no cabe de un tirón, el
+museo se parte en **diez rodajas por el último dígito del QID** —exhaustivas y
+disjuntas, porque un QID siempre acaba en 0-9— de ~12.000 obras y 1,5 MB cada
+una. Primero se intenta de un tirón porque a 47 de los 48 museos les basta.
+
+**Por qué JSON y no TSV**, que ocupa un tercio y habría cabido: de tres
+intentos en TSV, uno devolvió **72.400 de las 121.331 filas sin dar el menor
+error**. Un TSV cortado parece una respuesta corta y correcta; un JSON cortado
+no se parsea y el fallo se ve. Un formato que pierde datos en silencio no vale
+por compacto que sea.
+
+**Pendiente**: el plan B de las rodajas **no se ha ejercitado en vivo** —hace
+falta que la consulta de un tirón falle, y falla unas veces sí y otras no—. Si
+estuviera mal, el peor caso es el de siempre: museo abortado y rehecho al
+siguiente barrido.
+
+**Ojo con los contadores.** `refreshCounters` son tres UPDATE de tabla completa
+sobre 148.000 filas y ya rozan el `statement_timeout`; con la Galería dentro
+serían 270.000. Ya no tumban la ingesta (se avisa y se sigue), pero habrá que
+mirarlo.
+
+---
+
+## PENDIENTE (superado, se conserva el diagnóstico viejo): por qué no entraba
 
 Es el único museo de los 48 que sigue fuera. Cayó dos veces el 29 de agosto de
 2026 enumerando, con 504 y 502. **No tiene checkpoint**, así que cualquier
@@ -496,18 +545,59 @@ murió sin decir nada: última señal de vida a las 19:33».
 
 **Lo que NO está hecho de esta mitad:**
 
-- **Lanzar desde la pantalla.** Parar sí; lanzar necesita un proceso que esté
-  escuchando, y eso es otra cosa que decidir (¿un servicio en la máquina? ¿una
-  función programada?).
 - **Reanudar sola dentro de un museo.** El checkpoint por museo ya existía; el
   estado *dentro* de un museo se ve ahora, pero al reanudar se rehace entero.
-- El botón de parar está probado a nivel de función (`anon` rechazado con su
-  motivo, administrador aceptado); **no se ha ejercitado una parada en vivo**
-  con un barrido de varios museos.
-- Las filas de `ingest_runs`/`ingest_steps` no se borran nunca. Son diminutas
-  (~48 filas por barrido), pero si algún día molestan, la retención es trivial.
+- Las filas de `ingest_runs`/`ingest_steps`/`jobs` no se borran nunca. Son
+  diminutas (~48 filas por barrido), pero si algún día molestan, la retención
+  es trivial.
+
+### 1 bis. Pedir los trabajos desde la web — HECHO el 29 de agosto (tarde)
+
+Migración **0027**, `packages/ingest/src/worker.ts`, `trabajador.cmd` y la
+pantalla `/[lang]/admin/ingesta`, que ahora es la consola de operaciones.
+
+**Cómo se usa**: doble clic en `trabajador.cmd` (déjalo abierto) y desde
+`/es/admin/ingesta` se piden los trabajos: añadir o actualizar un museo,
+barrido completo, buscar imágenes, publicar, auditar, recalcular contadores y
+comprobar la base. Se ven en cola, en curso —con las últimas líneas de su
+salida en vivo— y terminados, y se pueden parar.
+
+**El reparto, que es la decisión de fondo.** Un barrido dura horas y Vercel
+corta las funciones a segundos; alojar algo que aguante horas cuesta dinero, y
+el plan gratuito es una restricción del proyecto. Así que **la web encarga, la
+máquina de casa ejecuta y la tabla `jobs` es el buzón**. Si no hay trabajador
+escuchando, el encargo espera; no se pierde.
+
+**La regla de seguridad, que no se puede relajar:** `kind` es una lista cerrada
+en la propia tabla, y los argumentos son **datos, nunca una orden**. El
+trabajador traduce cada `kind` a un comando fijo que él conoce y valida cada
+argumento. Sin eso, un formulario web sería un intérprete de comandos. Se
+comprobó de las cuatro maneras: el anónimo no puede llamar a `request_job`; un
+`kind` inventado lo rechaza la restricción de la tabla; insertar en `jobs`
+saltándose la función lo rechaza RLS; y argumentos envenenados
+(`Q1 --force; del *`, `; drop table artworks`) los para el trabajador y dejan
+el encargo en `failed` sin ejecutar nada.
+
+**Y dos cosas que se aprendieron a base de romperlas:**
+
+- **Se lanza `node` directamente, no `npm`.** En Windows `npm` es un `.cmd` que
+  abre un `cmd.exe` que abre el `node`: matar el envoltorio deja al nieto vivo
+  y escribiendo en el catálogo.
+- **Parar es pedirlo, no matarlo.** A la ingesta se le levanta la bandera y sale
+  entre museos. Probado en vivo: barrido corriendo, parada pedida en el museo
+  22, salida limpia en el 36 con todo marcado `cancelled` y ningún museo a
+  medias.
+
+`trabajador.cmd` es deliberadamente tonto —`chcp`, el PATH del Node bueno y un
+bucle que lo relanza a los 10 s— porque `reanudar-ingesta.cmd` intentó ser
+listo con PowerShell y nunca llegó a lanzar un barrido. Este se probó
+lanzándolo y comprobando que el proceso existe.
 
 ### 2. Editar el catálogo a mano — PENDIENTE
+
+Es lo único que queda de la aplicación. Añadir un museo entero ya se hace desde
+la web; lo que falta es **crear y corregir obras, artistas y movimientos uno a
+uno**.
 
 Formularios en el panel para **crear y corregir obras, artistas, museos y
 movimientos**. Esto ya estaba pedido en pequeño («alta manual de obras») y ahora

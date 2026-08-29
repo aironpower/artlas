@@ -226,28 +226,52 @@ async function main() {
 
   let cancelled = false;
 
+  /*
+   * TODO lo que va después de abrir la ejecución tiene que estar aquí dentro,
+   * y no solo el barrido. Con el recálculo de contadores fuera, su excepción
+   * salía por `main().catch()` y la fila se quedaba diciendo `running` hasta
+   * que el enterrador la recogía diez minutos después: el panel enseñaba «en
+   * curso» algo que ya no existía, que es justo lo que este registro vino a
+   * impedir. Pasó el 29 de agosto de 2026, con este código recién escrito.
+   */
   try {
     const outcome = await ingestAll(db, museums, options, log);
     stats = outcome.total;
     cancelled = outcome.cancelled;
+
+    /*
+     * Los contadores por museo/artista/movimiento se recalculan una sola vez
+     * al final: son tres UPDATE de tabla completa y hacerlos por lote sería
+     * absurdo.
+     *
+     * Y su fallo NO tumba la ingesta. También pasó el 29 de agosto: un barrido
+     * escribió sus obras bien y acabó reportando fracaso porque el recálculo
+     * agotó el `statement_timeout` —tres UPDATE sobre 148.000 filas están al
+     * borde—. El catálogo estaba correcto y el resumen decía que no, que es la
+     * clase de mentira que hace desconfiar de todo lo demás. Un contador
+     * desfasado se arregla con `npm run refresh`; una ingesta dada por fallida
+     * se rehace entera para nada.
+     */
+    if (db && stats.inserted > 0) {
+      console.log('\nRecalculando contadores…');
+      try {
+        await refreshCounters(db);
+        await analyzeTables();
+      } catch (err) {
+        console.warn(`  ⚠ no se pudieron recalcular: ${(err as Error).message}`);
+        console.warn('    El catálogo está escrito. `npm run refresh` los rehace.');
+      }
+    }
+
+    await log?.close(
+      cancelled ? 'cancelled' : stats.errors > 0 ? 'failed' : 'done',
+      stats,
+      stats.errors > 0 ? new Error(`${stats.errors} museo(s) con error`) : null,
+    );
   } catch (err) {
     await cerrarPorLaFuerza((err as Error).message);
     throw err;
   }
-
-  // Los contadores por museo/artista/movimiento se recalculan una sola vez al
-  // final: son tres UPDATE de tabla completa y hacerlos por lote sería absurdo.
-  if (db && stats.inserted > 0) {
-    console.log('\nRecalculando contadores…');
-    await refreshCounters(db);
-    await analyzeTables();
-  }
-
-  await log?.close(
-    cancelled ? 'cancelled' : stats.errors > 0 ? 'failed' : 'done',
-    stats,
-    stats.errors > 0 ? new Error(`${stats.errors} museo(s) con error`) : null,
-  );
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(0);
 

@@ -15,6 +15,22 @@ export const dynamic = 'force-dynamic';
 
 interface Props { params: Promise<{ lang: string }> }
 
+interface Job {
+  id: number;
+  kind: string;
+  args: Record<string, unknown>;
+  status: string;
+  requested_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  heartbeat_at: string | null;
+  cancel_requested: boolean;
+  exit_code: number | null;
+  error: string | null;
+  output: string | null;
+  run_id: number | null;
+}
+
 interface Run {
   id: number;
   started_at: string;
@@ -53,12 +69,16 @@ interface Step {
 }
 
 /**
- * La ingesta, en vivo.
+ * Ingestas y comprobaciones: pedirlas y seguirlas, sin terminal.
  *
  * Sustituye a leer `ingesta.log` con `tail`. El caso que la justifica: el
  * barrido del 28 de agosto de 2026 dejó 6.546 líneas de log, Filadelfia agotó
- * sus reintentos y murió a las 19:17, y se supo catorce horas después. Aquí
- * eso se ve en la primera pantalla y sin preguntarle a nadie.
+ * sus reintentos y murió a las 19:17, y se supo catorce horas después.
+ *
+ * Lo que se pide aquí NO se ejecuta aquí: se deja en la tabla `jobs` y lo coge
+ * el trabajador de casa (`npm run worker`). La web corta las funciones a
+ * segundos y un barrido dura horas; ese reparto es lo que hace que esto se
+ * pueda usar de verdad y siga siendo gratis.
  */
 export default async function IngestaPage({ params }: Props) {
   const { lang } = await params;
@@ -69,44 +89,83 @@ export default async function IngestaPage({ params }: Props) {
   const db = await supabaseServer();
 
   /*
-   * Enterrar a los muertos ANTES de leer.
-   *
-   * Un proceso que se cae de golpe deja su fila diciendo `running` para
-   * siempre. Sin esta llamada, esta pantalla enseñaría «en curso» con la misma
-   * cara de tranquilidad que tenía el log del 28 —que es exactamente el fallo
-   * que vino a arreglar—. `reap_dead_runs()` cierra lo que lleve diez minutos
-   * sin latir y escribe el motivo.
+   * Enterrar a los muertos ANTES de leer. Un proceso que se cae de golpe deja
+   * su fila diciendo `running` para siempre, y esta pantalla lo enseñaría «en
+   * curso» con la misma cara de tranquilidad que tenía el log del 28 — que es
+   * exactamente el fallo que vino a arreglar. Y un encargo muerto sin enterrar
+   * atasca el buzón: `request_job` no deja pedir otro igual.
    */
-  await db.rpc('reap_dead_runs');
+  await Promise.all([db.rpc('reap_dead_runs'), db.rpc('reap_dead_jobs')]);
 
-  const { data: runs } = await db
-    .from('ingest_runs')
-    .select('*')
-    .order('started_at', { ascending: false })
-    .limit(12);
+  const { data: rawJobs } = await db.from('jobs')
+    .select('*').order('requested_at', { ascending: false }).limit(15);
 
-  const ejecuciones = (runs ?? []) as Run[];
-  const actual = ejecuciones[0];
+  const encargos = (rawJobs ?? []) as Job[];
+  const activo = encargos.find((j) => j.status === 'running' || j.status === 'queued');
 
-  const { data: steps } = actual
-    ? await db.from('ingest_steps').select('*').eq('run_id', actual.id).order('position')
+  const { data: rawRuns } = await db.from('ingest_runs')
+    .select('*').order('started_at', { ascending: false }).limit(1);
+
+  const ejecucion = (rawRuns ?? [])[0] as Run | undefined;
+
+  const { data: rawSteps } = ejecucion
+    ? await db.from('ingest_steps').select('*').eq('run_id', ejecucion.id).order('position')
     : { data: [] };
 
-  const pasos = (steps ?? []) as Step[];
-  const viva = actual?.status === 'running';
+  const pasos = (rawSteps ?? []) as Step[];
+  const vivo = Boolean(activo) || ejecucion?.status === 'running';
 
-  async function parar(formData: FormData) {
+  async function encargar(formData: FormData) {
     'use server';
 
-    const id = Number(formData.get('run'));
+    const kind = String(formData.get('kind'));
+
+    /*
+     * Lista blanca, no barrido del formulario.
+     *
+     * Recorrer `formData.entries()` parecía equivalente y no lo es: Next mete
+     * sus propios campos ocultos para las acciones de servidor, y acababan
+     * guardados como argumentos —`$ACTION_13:0=...` salió impreso en la propia
+     * pantalla—. El trabajador los ignoraba, así que no era un agujero, pero
+     * guardar en la base lo que un formulario traiga por su cuenta es la forma
+     * de que un día sí lo sea.
+     */
+    const TEXTO = ['museum'] as const;
+    const NUMERO = ['limit', 'minNotability', 'imageBudget'] as const;
+    const SI_O_NO = ['everything', 'force', 'apply', 'images'] as const;
+
+    const args: Record<string, unknown> = {};
+
+    for (const clave of TEXTO) {
+      const v = String(formData.get(clave) ?? '').trim();
+      if (v) args[clave] = v;
+    }
+    for (const clave of NUMERO) {
+      const v = formData.get(clave);
+      if (v !== null && v !== '') args[clave] = Number(v);
+    }
+    for (const clave of SI_O_NO) {
+      if (formData.get(clave) !== null) args[clave] = true;
+    }
+
     const server = await supabaseServer();
 
     /*
-     * La comprobación de rol vive DENTRO de `request_ingest_cancel`. Que esta
-     * página esté protegida es comodidad; la garantía es que la función
-     * rechaza a quien no es administrador aunque la llame por su cuenta.
+     * La comprobación de rol vive DENTRO de `request_job`, y la lista de lo que
+     * se puede encargar está en la propia tabla. Esta pantalla no es la
+     * garantía: la base rechaza a quien no es administrador y rechaza un tipo
+     * de trabajo que no exista, aunque alguien llame a la API por su cuenta.
      */
-    await server.rpc('request_ingest_cancel', { p_run_id: id });
+    const { error } = await server.rpc('request_job', { p_kind: kind, p_args: args });
+    if (error) console.error('encargar:', error.message);
+
+    revalidatePath(`${path(idioma, 'admin')}/ingesta`);
+  }
+
+  async function cancelar(formData: FormData) {
+    'use server';
+    const server = await supabaseServer();
+    await server.rpc('cancel_job', { p_id: Number(formData.get('id')) });
     revalidatePath(`${path(idioma, 'admin')}/ingesta`);
   }
 
@@ -114,169 +173,243 @@ export default async function IngestaPage({ params }: Props) {
     <>
       <header style={{ padding: '30px 0 6px' }}>
         <p className="small muted"><Link href={path(idioma, 'admin')}>← Panel</Link></p>
-        <h1>La ingesta</h1>
-        <AutoRefresh activo={viva} />
+        <h1>Ingestas y comprobaciones</h1>
+        <AutoRefresh activo={vivo} />
       </header>
 
-      {!actual ? (
-        <p className="empty">
-          Todavía no se ha registrado ninguna ejecución.
+      <section>
+        <h2>Pedir un trabajo</h2>
+        <p className="muted small" style={{ margin: '8px 0 0' }}>
+          Lo ejecuta el trabajador de casa, no la web. Si no hay ninguno escuchando, el
+          encargo espera en la cola hasta que lo haya: <code>npm run worker</code>.
         </p>
-      ) : (
-        <>
-          <section>
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Estado estado={actual.status} />
-              <span>Ejecución #{actual.id}</span>
-            </h2>
 
-            {actual.error && (
-              <p style={{ color: 'var(--accent)', margin: '10px 0 0' }}>{actual.error}</p>
-            )}
+        <ul className="findings">
+          <Encargo
+            titulo="Añadir o actualizar un museo"
+            pie="El identificador de Wikidata del museo, como Q160112 para el Prado."
+            kind="ingest" accion={encargar}
+          >
+            <input className="campo" name="museum" placeholder="Q160112" required
+              pattern="Q[1-9][0-9]*" title="Un QID: la Q y números" />
+            <Casilla name="everything" etiqueta="todo lo que exista" />
+            <Casilla name="force" etiqueta="rehacer aunque esté hecho" />
+          </Encargo>
 
-            {actual.cancel_requested && viva && (
-              <p className="muted" style={{ margin: '10px 0 0' }}>
-                Parada pedida. Sale al terminar el museo que tiene entre manos: cortarlo
-                a la mitad lo dejaría sin checkpoint y habría que rehacerlo entero.
-              </p>
-            )}
+          <Encargo
+            titulo="Barrido completo"
+            pie="Los 48 museos. Horas de trabajo: se puede parar y se reanuda por donde iba."
+            kind="ingest" accion={encargar}
+          >
+            <Casilla name="everything" etiqueta="todo lo que exista" />
+          </Encargo>
 
-            <ul className="facts">
-              <Fact k="Museos" v={
-                `${formatNumber(idioma, actual.museums_done)} de ` +
-                `${formatNumber(idioma, actual.museums_total ?? 0)}`
-              } />
-              <Fact k="Empezó" v={cuando(actual.started_at)} />
-              <Fact k={viva ? 'Lleva' : 'Duró'} v={
-                duracion(actual.started_at, actual.finished_at ?? new Date().toISOString())
-              } />
-              {viva && <Fact k="Última señal" v={hace(actual.heartbeat_at)} />}
-              <Fact k="Escritas" v={formatNumber(idioma, actual.stats.inserted ?? 0)} />
-              {(actual.stats.lostWorks ?? 0) > 0 && (
-                <Fact k="Obras perdidas" v={formatNumber(idioma, actual.stats.lostWorks!)} />
-              )}
-              {(actual.stats.retries ?? 0) > 0 && (
-                <Fact k="Reintentos" v={formatNumber(idioma, actual.stats.retries!)} />
-              )}
-              <Fact k="Lanzada con" v={actual.command || '(sin opciones)'} />
-              <Fact k="Dónde" v={`${actual.host ?? '?'} · pid ${actual.pid ?? '?'}`} />
-            </ul>
+          <Encargo
+            titulo="Buscar las imágenes que faltan"
+            pie="Pregunta a la API del propio museo por las obras que esperan una imagen."
+            kind="fill-images" accion={encargar}
+          >
+            <Casilla name="apply" etiqueta="escribir de verdad" />
+          </Encargo>
 
-            {viva && !actual.cancel_requested && (
-              <form action={parar} style={{ marginTop: 16 }}>
-                <input type="hidden" name="run" value={actual.id} />
-                <button className="btn" type="submit">Parar al acabar este museo</button>
-              </form>
-            )}
-          </section>
+          <Encargo
+            titulo="Publicar las que ya se pueden"
+            pie="Revisa las obras que esperaban y publica las que ya tienen lo que les faltaba."
+            kind="promote" accion={encargar}
+          >
+            <Casilla name="apply" etiqueta="escribir de verdad" />
+          </Encargo>
 
-          <section style={{ paddingTop: 26 }}>
-            <h2>Museo por museo</h2>
+          <Encargo
+            titulo="Auditar el catálogo"
+            pie="Busca problemas y los deja en la bandeja de hallazgos. Con imágenes tarda horas."
+            kind="audit" accion={encargar}
+          >
+            <Casilla name="images" etiqueta="comprobar también las imágenes" />
+          </Encargo>
 
-            {pasos.length === 0 ? (
-              <p className="muted small" style={{ marginTop: 12 }}>
-                Aún no ha empezado ninguno.
-              </p>
-            ) : (
-              <ul className="findings">
-                {[...pasos].reverse().map((p) => (
-                  <li key={p.id}>
-                    <div>
-                      <Estado estado={p.status} />
-                      <span style={{ marginLeft: 8 }}>{p.museum_name}</span>
-                      <span className="muted small"> · {p.museum_qid}</span>
+          <Encargo titulo="Recalcular contadores" pie="Obras por museo, por artista y por movimiento."
+            kind="refresh" accion={encargar} />
 
-                      <p className="muted small" style={{ margin: '4px 0 0' }}>
-                        {cifras(idioma, p)}
-                      </p>
+          <Encargo titulo="Comprobar la base" pie="Esquema, credenciales y espacio ocupado."
+            kind="check-db" accion={encargar} />
+        </ul>
+      </section>
 
-                      {p.error && (
-                        <p className="small" style={{ margin: '4px 0 0', color: 'var(--accent)' }}>
-                          {p.error}
-                        </p>
-                      )}
-                    </div>
+      <section style={{ paddingTop: 26 }}>
+        <h2>La cola</h2>
 
-                    <span className="muted small" style={{ flexShrink: 0 }}>
-                      {p.finished_at ? duracion(p.started_at, p.finished_at) : hace(p.started_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
+        {encargos.length === 0 ? (
+          <p className="muted small" style={{ marginTop: 12 }}>Nada encargado todavía.</p>
+        ) : (
+          <ul className="findings">
+            {encargos.map((j) => (
+              <li key={j.id}>
+                <div style={{ flex: 1 }}>
+                  <Estado estado={j.status} />
+                  <span style={{ marginLeft: 8, fontWeight: 600 }}>{j.kind}</span>
+                  <span className="muted small"> {resumirArgs(j.args)}</span>
+                  <span className="muted small"> · #{j.id} · {cuando(j.requested_at)}</span>
 
-      {ejecuciones.length > 1 && (
-        <section style={{ paddingTop: 26 }}>
-          <h2>Antes</h2>
-          <ul className="facts">
-            {ejecuciones.slice(1).map((r) => (
-              <li key={r.id}>
-                <span className="k"><Estado estado={r.status} /></span>
-                <span>
-                  #{r.id} · {cuando(r.started_at)}
-                  <span className="muted">
-                    {' · '}{formatNumber(idioma, r.stats.inserted ?? 0)} escritas
-                    {' · '}{formatNumber(idioma, r.museums_done)} museo(s)
-                  </span>
-                  {r.error && <p className="muted small" style={{ margin: '2px 0 0' }}>{r.error}</p>}
-                </span>
+                  {j.error && (
+                    <p className="small" style={{ margin: '4px 0 0', color: 'var(--accent)' }}>{j.error}</p>
+                  )}
+
+                  {j.cancel_requested && j.status === 'running' && (
+                    <p className="muted small" style={{ margin: '4px 0 0' }}>
+                      Parada pedida. Sale en cuanto pueda hacerlo sin dejar trabajo a medias.
+                    </p>
+                  )}
+
+                  {j.status === 'running' && j.output && (
+                    <pre className="salida">{ultimasLineas(j.output, 14)}</pre>
+                  )}
+                </div>
+
+                {(j.status === 'running' || j.status === 'queued') && !j.cancel_requested && (
+                  <form action={cancelar} className="acciones">
+                    <input type="hidden" name="id" value={j.id} />
+                    <button className="btn" type="submit">
+                      {j.status === 'queued' ? 'Quitar de la cola' : 'Parar'}
+                    </button>
+                  </form>
+                )}
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {ejecucion && (
+        <section style={{ paddingTop: 26 }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Estado estado={ejecucion.status} />
+            <span>Última ingesta, museo a museo</span>
+          </h2>
+
+          {ejecucion.error && (
+            <p style={{ color: 'var(--accent)', margin: '10px 0 0' }}>{ejecucion.error}</p>
+          )}
+
+          <ul className="facts">
+            <Fact k="Museos" v={
+              `${formatNumber(idioma, ejecucion.museums_done)} de ` +
+              `${formatNumber(idioma, ejecucion.museums_total ?? 0)}`
+            } />
+            <Fact k={ejecucion.status === 'running' ? 'Lleva' : 'Duró'} v={
+              duracion(ejecucion.started_at, ejecucion.finished_at ?? new Date().toISOString())
+            } />
+            {ejecucion.status === 'running' &&
+              <Fact k="Última señal" v={hace(ejecucion.heartbeat_at)} />}
+            <Fact k="Escritas" v={formatNumber(idioma, ejecucion.stats.inserted ?? 0)} />
+            {(ejecucion.stats.lostWorks ?? 0) > 0 && (
+              <Fact k="Obras perdidas" v={formatNumber(idioma, ejecucion.stats.lostWorks!)} />
+            )}
+            {(ejecucion.stats.retries ?? 0) > 0 && (
+              <Fact k="Reintentos" v={formatNumber(idioma, ejecucion.stats.retries!)} />
+            )}
+            <Fact k="Dónde" v={`${ejecucion.host ?? '?'} · pid ${ejecucion.pid ?? '?'}`} />
+          </ul>
+
+          {pasos.length > 0 && (
+            <ul className="findings">
+              {[...pasos].reverse().map((p) => (
+                <li key={p.id}>
+                  <div>
+                    <Estado estado={p.status} />
+                    <span style={{ marginLeft: 8 }}>{p.museum_name}</span>
+                    <span className="muted small"> · {p.museum_qid}</span>
+                    <p className="muted small" style={{ margin: '4px 0 0' }}>{cifras(idioma, p)}</p>
+                    {p.error && (
+                      <p className="small" style={{ margin: '4px 0 0', color: 'var(--accent)' }}>{p.error}</p>
+                    )}
+                  </div>
+                  <span className="muted small" style={{ flexShrink: 0 }}>
+                    {p.finished_at ? duracion(p.started_at, p.finished_at) : hace(p.started_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
       <p className="small muted" style={{ marginTop: 20 }}>
-        El detalle sigue estando en <code>ingesta.log</code>. Aquí vive el estado: en qué
-        va, qué terminó con qué números y qué falló.
+        El detalle completo sigue en <code>ingesta.log</code>. Aquí vive el estado: qué se
+        pidió, en qué va, qué terminó con qué números y qué falló.
       </p>
     </>
+  );
+}
+
+/** Un trabajo que se puede pedir: su explicación, sus opciones y su botón. */
+function Encargo({ titulo, pie, kind, accion, children }: {
+  titulo: string; pie: string; kind: string;
+  accion: (fd: FormData) => Promise<void>; children?: React.ReactNode;
+}) {
+  return (
+    <li>
+      <div style={{ flex: 1 }}>
+        <span style={{ fontWeight: 600 }}>{titulo}</span>
+        <p className="muted small" style={{ margin: '2px 0 0' }}>{pie}</p>
+      </div>
+      <form action={accion} className="acciones" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="hidden" name="kind" value={kind} />
+        {children}
+        <button className="btn btn-primary" type="submit">Encargar</button>
+      </form>
+    </li>
+  );
+}
+
+function Casilla({ name, etiqueta }: { name: string; etiqueta: string }) {
+  return (
+    <label className="small muted" style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+      <input type="checkbox" name={name} />{etiqueta}
+    </label>
   );
 }
 
 /**
  * La etiqueta de estado.
  *
- * Reutiliza los tres colores de `sev` en vez de inventar una paleta nueva: son
- * los mismos tres niveles de atención —esto duele, esto mira, esto está bien— y
- * el panel ya se lee así.
+ * Reutiliza los colores de `sev` en vez de inventar una paleta: son los mismos
+ * niveles de atención —esto duele, esto mira, esto está bien—. `running` tiene
+ * el suyo porque es el único estado que cambia mientras se mira, y con el gris
+ * de los demás una tarea viva y una terminada hace tres horas se leían igual.
  */
 function Estado({ estado }: { estado: string }) {
   const severidad: Record<string, string> = {
-    running: 'live',
-    done: 'info',
-    skipped: 'info',
-    incomplete: 'warning',
-    cancelled: 'warning',
-    failed: 'error',
+    running: 'live', queued: 'warning', done: 'info', skipped: 'info',
+    incomplete: 'warning', cancelled: 'warning', failed: 'error',
   };
-
   const texto: Record<string, string> = {
-    running: 'en curso',
-    done: 'hecho',
-    skipped: 'ya estaba',
-    incomplete: 'incompleto',
-    cancelled: 'parada',
-    failed: 'falló',
+    running: 'en curso', queued: 'en cola', done: 'hecho', skipped: 'ya estaba',
+    incomplete: 'incompleto', cancelled: 'parada', failed: 'falló',
   };
-
-  return (
-    <span className={`sev sev-${severidad[estado] ?? 'info'}`}>{texto[estado] ?? estado}</span>
-  );
+  return <span className={`sev sev-${severidad[estado] ?? 'info'}`}>{texto[estado] ?? estado}</span>;
 }
 
 function Fact({ k, v }: { k: string; v: string }) {
   return <li><span className="k">{k}</span><span>{v}</span></li>;
 }
 
+/** Las opciones con las que se pidió, en corto. */
+function resumirArgs(args: Record<string, unknown>): string {
+  const partes = Object.entries(args ?? {})
+    .map(([k, v]) => (v === true ? k : `${k}=${v}`));
+  return partes.length > 0 ? `· ${partes.join(' ')}` : '';
+}
+
+function ultimasLineas(texto: string, n: number): string {
+  const lineas = texto.split('\n');
+  return lineas.slice(-n).join('\n');
+}
+
 /**
- * Las cifras de un museo, sin los ceros.
- *
- * Enseñar «0 publicadas, 0 esperando, 0 rechazadas, 0 duplicadas» en cada fila
- * llenaría la pantalla de nada y escondería la línea que sí importa.
+ * Las cifras de un museo, sin los ceros: enseñar «0 publicadas, 0 esperando,
+ * 0 rechazadas» en cada fila llenaría la pantalla de nada y escondería la línea
+ * que importa.
  */
 function cifras(lang: Lang, p: Step): string {
   const partes: string[] = [];
@@ -299,7 +432,6 @@ function cifras(lang: Lang, p: Step): string {
 function cuando(iso: string): string {
   const d = new Date(iso);
   const hoy = new Date().toDateString() === d.toDateString();
-
   return hoy
     ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
