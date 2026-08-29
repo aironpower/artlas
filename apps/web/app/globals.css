@@ -105,20 +105,84 @@ input[type='search'], input[type='text'], input[type='number'], select {
 
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-/*
- * `accent-color` es lo que pinta las casillas y los radios; el resaltado de la
- * opción abierta de un `<select>` lo pinta el sistema y solo algunos
- * navegadores dejan tocarlo, así que se hacen las dos cosas. Donde no se
- * pueda, se queda como estaba: no es un fallo, es el límite del control nativo.
- */
+/* `accent-color` pinta casillas, radios y barras de progreso. */
 input, select, textarea { accent-color: var(--seleccion); }
-
-option:checked, option:hover { background: var(--seleccion); color: #fff; }
 
 ::selection { background: var(--seleccion); color: #fff; }
 
-/* Un desplegable apagado tiene que parecerlo, no parecer roto. */
+/* --- El desplegable, dibujado por la página y no por el sistema ----------- */
+
+/*
+ * `appearance: base-select` es lo que por fin permite pintar la lista abierta
+ * de un `<select>`.
+ *
+ * Hasta que existió, la lista desplegada la dibujaba el sistema operativo y el
+ * CSS no llegaba: `option:hover` se ignoraba y el resaltado seguía siendo el
+ * azul de Windows, el único color de la pantalla que no había elegido nadie.
+ *
+ * El elemento `<selectlist>` que se propuso para esto no llegó a existir —se
+ * renombró a `<selectmenu>` y luego se abandonó—, y lo que se estandarizó fue
+ * mejor: se personaliza el `<select>` de siempre. Eso importa aquí porque los
+ * filtros funcionan sin JavaScript a propósito, y esto no lo cambia: sigue
+ * siendo un `<select>` dentro de un formulario GET.
+ *
+ * Y degrada solo. Donde no esté soportado (hoy Firefox y Safari), la regla se
+ * ignora y sale el desplegable nativo de siempre. No hay dos caminos que
+ * mantener ni nada que detectar.
+ *
+ * Los dos selectores van juntos por obligación: si solo uno acepta el modo
+ * nuevo, el navegador se queda a medias entre los dos.
+ */
+select, ::picker(select) { appearance: base-select; }
+
+select {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid var(--border); border-radius: 0;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 0.95rem;
+  cursor: pointer;
+}
+select:hover { border-color: var(--muted); }
 select:disabled { color: var(--muted); background: var(--accent-soft); cursor: not-allowed; }
+
+/* La flecha. Sin el modo nuevo la pone el navegador; con él, hay que ponerla. */
+select::picker-icon {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+select:open::picker-icon { transform: rotate(180deg); }
+
+::picker(select) {
+  border: 1px solid var(--text);
+  border-radius: 0;
+  background: var(--surface);
+  padding: 0;
+  /* La única sombra de la web: una lista abierta tiene que flotar sobre lo
+     que tapa, o no se entiende que es temporal. */
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.14);
+}
+
+option {
+  padding: 8px 13px;
+  font-size: 0.93rem;
+  background: var(--surface); color: var(--text);
+}
+
+/* Aquí es donde muere el azul. */
+option:hover, option:focus { background: var(--seleccion); color: #fff; outline: none; }
+option:checked { font-weight: 650; }
+
+/*
+ * La marca de «esta es la elegida» la pone el navegador y ocupa un hueco fijo
+ * a la izquierda de TODAS las opciones, alineándolas contra un margen que solo
+ * usa una. Se quita y la elegida se distingue por el peso de la letra.
+ */
+option::checkmark { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  select::picker-icon { transition: none; }
+}
 
 /*
  * Botones sin borde ni esquina redonda.
