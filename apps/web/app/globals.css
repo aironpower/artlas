@@ -29,13 +29,18 @@
    * él —son casi opuestos en el círculo— y sigue leyéndose como «esto está
    * elegido» sin robarle el papel al acento, que es el que manda.
    *
-   * La salvia clara va con texto OSCURO encima, no blanco, y esa es la razón
-   * de que pueda ser clara: con blanco se queda en 3,0:1 de contraste y no
-   * llega al mínimo legible; con el negro del texto sube a 6,7:1. Aclarar el
-   * verde y dejar el texto blanco habría sido elegir el tono bonito y hacer
-   * ilegible lo que marca.
+   * La salvia clara va con texto OSCURO encima, y esa es la razón de que pueda
+   * ser tan clara: con blanco se quedaría en 1,6:1 de contraste —invisible— y
+   * con el negro sube a 10,4:1.
+   *
+   * Por eso el color del texto tiene su propio token en vez de usar `--text`:
+   * en modo oscuro `--text` es claro, y sobre este verde habría desaparecido.
+   * El verde de lo seleccionado es el mismo en los dos modos —es una marca de
+   * rotulador, y un rotulador no cambia de color al apagar la luz—, así que su
+   * texto tiene que ser oscuro siempre.
    */
-  --seleccion: #8fa47a;
+  --seleccion: #afcca5;
+  --seleccion-texto: #17150f;
 
   /* Casi nada: una línea basta para separar dos superficies blancas. */
   --shadow: none;
@@ -54,7 +59,8 @@
     --muted: #a09689;
     --accent: #f08d55;
     --accent-soft: #2e211a;
-    --seleccion: #b6c9a2;
+    --seleccion: #afcca5;
+    --seleccion-texto: #17150f;
     --shadow: none;
   }
 }
@@ -110,7 +116,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 /* `accent-color` pinta casillas, radios y barras de progreso. */
 input, select, textarea { accent-color: var(--seleccion); }
 
-::selection { background: var(--seleccion); color: var(--text); }
+::selection { background: var(--seleccion); color: var(--seleccion-texto); }
 
 /* --- El desplegable, dibujado por la página y no por el sistema ----------- */
 
@@ -172,7 +178,9 @@ option {
 }
 
 /* Aquí es donde muere el azul. */
-option:hover, option:focus { background: var(--seleccion); color: var(--text); outline: none; }
+option:hover, option:focus {
+  background: var(--seleccion); color: var(--seleccion-texto); outline: none;
+}
 option:checked { font-weight: 650; }
 
 /*
