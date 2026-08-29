@@ -1,28 +1,44 @@
 /* Artlas — hoja de estilo única. La app es pequeña y visual; un sistema de
-   tokens en CSS puro evita arrastrar una dependencia de estilos entera. */
+   tokens en CSS puro evita arrastrar una dependencia de estilos entera.
+
+   Sin color, a propósito. En una pared de museo lo único que tiene color son
+   los cuadros, y aquí pasa lo mismo: la única fuente de color de la pantalla
+   son las obras. Un acento terracota compitiendo con un Rothko es ruido.
+
+   Por eso `--accent` no es un color sino la tinta: negro sobre blanco, y del
+   revés en modo oscuro. Todo lo que antes se distinguía por tono ahora se
+   distingue por peso, contraste o posición, que es como funciona la
+   señalética de un museo. */
 
 :root {
-  --bg: #faf9f7;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --border: #e5e1da;
-  --text: #1a1815;
-  --muted: #6b6459;
-  --accent: #8c2f1f;
-  --accent-soft: #f4e8e5;
-  --shadow: 0 1px 3px rgb(26 24 21 / 0.08), 0 8px 24px rgb(26 24 21 / 0.04);
-  --radius: 10px;
+  --border: #e2e2e2;
+  --text: #0a0a0a;
+  --muted: #6e6e6e;
+
+  /* La tinta. No es un color: es lo contrario del fondo. */
+  --accent: #0a0a0a;
+  --accent-soft: #f0f0f0;
+
+  /* Casi nada: una línea basta para separar dos superficies blancas. */
+  --shadow: none;
+
+  /* Sin redondear. Una esquina redonda insinúa un botón de sistema
+     operativo; una recta no dice nada, que es lo que se busca. */
+  --radius: 0px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161513;
-    --surface: #201e1b;
-    --border: #34302a;
-    --text: #f0ece5;
-    --muted: #a39a8c;
-    --accent: #e07a5f;
-    --accent-soft: #2d211d;
-    --shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #2b2b2b;
+    --text: #f2f2f2;
+    --muted: #9b9b9b;
+    --accent: #f2f2f2;
+    --accent-soft: #1c1c1c;
+    --shadow: none;
   }
 }
 
@@ -72,15 +88,29 @@ input[type='search'], input[type='text'], input[type='number'], select {
 
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
+/*
+ * Botones sin borde ni esquina redonda.
+ *
+ * Quitado el borde, un botón necesita otra forma de decir que se puede pulsar,
+ * o se convierte en texto suelto. Aquí lo dice el fondo: el secundario es una
+ * mancha gris, el principal es tinta maciza. Y al pasar por encima invierten,
+ * que es un cambio que se ve sin mirar y no depende de distinguir dos grises.
+ */
 .btn {
-  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface); color: var(--text);
-  font: inherit; font-size: 0.95rem; font-weight: 550;
+  padding: 10px 18px; border: 0; border-radius: 0;
+  background: var(--accent-soft); color: var(--text);
+  font: inherit; font-size: 0.93rem; font-weight: 550;
+  letter-spacing: 0.01em;
   cursor: pointer; white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.btn:hover { border-color: var(--accent); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { filter: brightness(1.08); }
+.btn:hover { background: var(--accent); color: var(--bg); }
+
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { background: var(--muted); }
+
+/* Se marca dónde está el foco, que sin bordes es más fácil de perder. */
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* --- Rejilla de obras ----------------------------------------------------- */
 
@@ -112,7 +142,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 .pin {
   display: grid; place-items: center;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--bg);
   border: 2px solid var(--surface); border-radius: 999px;
   font-size: 0.75rem; font-weight: 700; cursor: pointer;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
@@ -123,7 +153,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .dot {
   display: grid; place-items: center;
   width: 13px; height: 13px; padding: 0;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--bg);
   border: 2px solid var(--surface); border-radius: 999px;
   font: inherit; font-size: 0.72rem; font-weight: 700; line-height: 1;
   cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
@@ -201,9 +231,14 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.sev-error   { background: var(--accent-soft); color: var(--accent); }
-.sev-warning { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
-.sev-info    { background: transparent; color: var(--muted); }
+/*
+ * Sin color, la gravedad se dice con contraste: lo que duele va en tinta
+ * maciza y lo que no, en gris. Es el mismo orden de atención que daba el rojo,
+ * conseguido con lo único que queda cuando quitas el tono.
+ */
+.sev-error   { background: var(--accent); color: var(--bg); }
+.sev-warning { background: var(--accent-soft); color: var(--text); }
+.sev-info    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 
 /*
  * «En curso» es el único estado que cambia mientras se mira, así que es el
@@ -211,7 +246,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
  * ingesta viva y una terminada hace tres horas se leían igual, que es la
  * confusión que esta pantalla vino a quitar.
  */
-.sev-live { background: var(--accent); color: #fff; }
+.sev-live { background: var(--accent); color: var(--bg); }
 
 @media (prefers-reduced-motion: no-preference) {
   .sev-live { animation: latido 1.8s ease-in-out infinite; }

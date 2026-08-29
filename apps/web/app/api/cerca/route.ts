@@ -26,11 +26,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'parámetros inválidos' }, { status: 400 });
   }
 
+  /*
+   * Se busca en círculos cada vez más anchos hasta encontrar algo.
+   *
+   * Antes se preguntaba solo por 15 km —«el radio útil de una ciudad»— y quien
+   * estuviera fuera de una recibía «no hemos encontrado nada», que suena a
+   * avería. Le pasó a Manuel a 150 km de Barcelona: la respuesta era cierta y
+   * completamente inútil, porque lo que uno quiere saber ahí no es que no haya
+   * nada al lado, sino dónde está lo más cercano.
+   *
+   * Cuatro consultas como mucho, y solo cuando las anteriores vuelven vacías:
+   * quien esté en una ciudad con museo sigue pagando una sola.
+   */
+  const RADIOS = [15_000, 60_000, 250_000, 1_000_000];
+
   try {
-    const works = await artworksNear(lang, lat, lng, 15_000);
-    return NextResponse.json(
-      works.map((w) => ({ ...w, image_url: imageUrl(w.image_url, 500) })),
-    );
+    for (const radio of RADIOS) {
+      const works = await artworksNear(lang, lat, lng, radio);
+
+      if (works.length > 0 || radio === RADIOS[RADIOS.length - 1]) {
+        return NextResponse.json({
+          radio,
+          works: works.map((w) => ({ ...w, image_url: imageUrl(w.image_url, 500) })),
+        });
+      }
+    }
+
+    return NextResponse.json({ radio: RADIOS[RADIOS.length - 1], works: [] });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

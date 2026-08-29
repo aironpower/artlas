@@ -57,7 +57,28 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
             attribution: '© OpenStreetMap',
           },
         },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        layers: [{
+          id: 'osm',
+          type: 'raster',
+          source: 'osm',
+          /*
+           * El mapa, en gris.
+           *
+           * Se desatura en la capa, con las propiedades de MapLibre, y no con
+           * un `filter: grayscale()` de CSS: el filtro de CSS se aplica al
+           * lienzo entero y se llevaría por delante también los chinchetas y
+           * los globos, que son justamente lo que tiene que destacar.
+           *
+           * Y se sube el brillo mínimo además de quitar el tono: un mapa de
+           * OSM desaturado a secas queda de un gris medio sucio que compite
+           * con las obras. Aclarado, pasa a ser el papel sobre el que están.
+           */
+          paint: {
+            'raster-saturation': -1,
+            'raster-contrast': -0.15,
+            'raster-brightness-min': 0.22,
+          },
+        }],
       },
     });
 

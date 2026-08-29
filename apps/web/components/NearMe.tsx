@@ -18,7 +18,9 @@ type State =
   | { status: 'idle' }
   | { status: 'locating' }
   | { status: 'denied' }
-  | { status: 'ready'; works: NearbyArtwork[] };
+  /* `radio` es el círculo en el que se acabó encontrando algo: si no es el
+   * primero, hay que decirlo, porque «cerca» deja de ser cierto. */
+  | { status: 'ready'; works: NearbyArtwork[]; radio: number };
 
 export default function NearMe({ lang }: { lang: Lang }) {
   const [state, setState] = useState<State>({ status: 'idle' });
@@ -35,7 +37,8 @@ export default function NearMe({ lang }: { lang: Lang }) {
             `/api/cerca?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&lang=${lang}`,
           );
           if (!res.ok) throw new Error('cerca');
-          setState({ status: 'ready', works: (await res.json()) as NearbyArtwork[] });
+          const datos = await res.json() as { works: NearbyArtwork[]; radio: number };
+          setState({ status: 'ready', works: datos.works, radio: datos.radio });
         } catch {
           setState({ status: 'denied' });
         }
@@ -56,10 +59,14 @@ export default function NearMe({ lang }: { lang: Lang }) {
 
       {state.status === 'ready' && (
         state.works.length === 0
-          ? <p className="muted">{t(lang, 'noResults')}</p>
+          ? <p className="muted">{t(lang, 'nothingAtAll')}</p>
           : (
             <>
               <h2>{t(lang, 'nearMe')}</h2>
+              {/* Solo se avisa cuando «cerca» ha dejado de ser cierto. */}
+              {state.radio > 15_000 && (
+                <p className="muted small">{t(lang, 'nothingWithin')}</p>
+              )}
               <div className="grid">
                 {state.works.slice(0, 8).map((w) => (
                   <Link key={w.id} href={path(lang, 'artwork', w.id)} className="card">
