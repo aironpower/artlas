@@ -1,6 +1,6 @@
 # Notas de trabajo
 
-Estado al 29 de agosto de 2026 (tarde) y lo siguiente a hacer.
+Estado al 31 de agosto de 2026 y lo siguiente a hacer.
 
 ---
 
@@ -17,7 +17,8 @@ completos, 214 MB de los 500 del plan gratuito.
    Los **formularios** también están: obras y artistas (0028-0031) y, desde el
    29 por la noche, museos, movimientos y los textos de cada idioma (0033), con
    listas para navegarlos en `/es/admin/catalogo`. Sección **HECHO: corregir el
-   catálogo entero a mano**.
+   catálogo entero a mano**. Y el 31, las **quince ciudades** que Wikidata dejó
+   como barrio o distrito: sección **HECHO: las ciudades, corregidas**.
 
 2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
    está medido y el arreglo identificado —partir la consulta por titulares de
@@ -748,14 +749,52 @@ un campo y se guarda, se suelta y vuelve a mandar Wikidata, y una escritura con
 nadie tocó. La ficha pública del Bosco ya dice «El Bosco» y la del MNAC,
 Barcelona.
 
-**Quedan 16 ciudades mal**, todas de un clic en `/es/admin/catalogo/ciudades`:
-Manhattan (Met, MoMA, Guggenheim, Whitney) → Nueva York; City of Westminster
-(National Gallery, Wallace, Courtauld, Tate Britain) y London Borough of
-Southwark (Tate Modern) → Londres; Innere Stadt → Viena; Bezirk Mitte →
-Berlín; Maxvorstadt → Múnich; 7th arrondissement of Paris → París; municipio de
-Estocolmo, de Copenhague, City of Edinburgh, City of Melbourne, Roma Capitale,
-Brussels-Capital Region, Ueno-kōen → Tokio. Y `Firenze` y `Florence` son la
-misma ciudad partida en dos.
+---
+
+## HECHO: las ciudades, corregidas (31 de agosto de 2026)
+
+Eran quince, no dieciséis, y salieron de medir la lista entera en vez de fiarse
+de la de la noche anterior: **38 ciudades → 34**, 20 museos tocados. Innere
+Stadt → Vienna, City of Melbourne → Melbourne, Brussels-Capital Region →
+Brussels, Bezirk Mitte → Berlin, Maxvorstadt → Munich, Copenhagen Municipality →
+Copenhagen, 7th arrondissement of Paris → Paris, City of Westminster y London
+Borough of Southwark → London, City of Edinburgh → Edinburgh, Roma Capitale →
+Rome, Firenze → Florence, Ueno-kōen → Tokyo, Stockholm Municipality →
+Stockholm, Manhattan → New York City. Cada una con su nombre en es, en y fr,
+que es lo que se lee.
+
+Cuatro eran fusiones y cuadraron solas: Londres tiene ahora 5 museos, Nueva
+York 4, París 3, Florencia 3, Múnich 2.
+
+**No se hizo con un UPDATE.** Fue por `renombrar_ciudad()`, la misma función que
+llama el formulario, porque la marca en `locked_fields` es lo único que impide
+que el siguiente barrido lo deshaga. Esa función exige `is_admin()`, así que
+hace falta una sesión de verdad: se pide un enlace de acceso con la
+service_role, se canja con `verifyOtp({ token_hash })` y se llama a la RPC con
+esa sesión. Es el camino del usuario sin navegador, y sirve para cualquier
+corrección masiva futura. Ojo: `token_hash`, no `email` + `token` — lo que
+devuelve `generateLink` ya viene resumido y por la otra puerta se compara contra
+el código de seis cifras, que da «Token has expired or is invalid».
+
+Se hizo **una primero** —Ueno-kōen, la más pequeña— y se comprobó entera antes
+de lanzar las catorce: lo canónico, los tres idiomas (el `es` no existía y lo
+creó), la marca a los dos niveles y el filtro público respondiendo.
+
+Comprobado al terminar, contra la misma `search_artworks` que llama la app: los
+nombres nuevos devuelven obras y **los viejos devuelven cero**. Y por el camino
+del usuario, con `next dev` en el 3112: `/es/buscar?pais=GB&ciudad=London`
+filtra y rotula «Londres».
+
+**De propina, midiendo**: el Van Gogh Museum tenía `country` = Netherlands y
+`country_code` vacío, así que se caía de cualquier filtro por país. Corregido a
+NL por la misma puerta.
+
+**Lo que sigue mal y no se tocó.** Las filas de `de`, `it`, `nl` y `pt` todavía
+dicen «Manhattan» y «Saint-Germain-l'Auxerrois»: no son idiomas de la app hoy,
+pero volverán a verse el día que se reactiven. Y esto es una corrección museo a
+museo, no una regla: **un museo nuevo de Nueva York entrará otra vez como
+«Manhattan»** y volverá a partir el filtro en dos. Mientras sean 48 museos se
+mira la lista y ya; cuando sean 500, hay que subir por la cadena de `P131`.
 
 ---
 
