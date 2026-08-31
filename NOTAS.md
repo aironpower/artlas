@@ -14,9 +14,10 @@ completos, 214 MB de los 500 del plan gratuito.
 1. **La aplicación de ingesta.** Hecho el 29 de agosto: ver la ingesta en vivo,
    y **pedir y parar los trabajos desde la web**. Arranca el trabajador
    (`trabajador.cmd`, doble clic) y todo se maneja desde `/es/admin/ingesta`.
-   Queda la segunda mitad: **formularios** para crear y corregir obras,
-   artistas y museos a mano. Sección **LA APLICACIÓN DE INGESTA**, con las tres
-   cosas que hay que decidir antes de escribir el primer formulario.
+   Los **formularios** también están: obras y artistas (0028-0031) y, desde el
+   29 por la noche, museos, movimientos y los textos de cada idioma (0033), con
+   listas para navegarlos en `/es/admin/catalogo`. Sección **HECHO: corregir el
+   catálogo entero a mano**.
 
 2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
    está medido y el arreglo identificado —partir la consulta por titulares de
@@ -695,6 +696,69 @@ Lo que hay que resolver antes de escribir el primer formulario:
 
 ---
 
+## HECHO: corregir el catálogo entero a mano (29 de agosto, noche)
+
+Manuel encontró tres fallos mirando la app: el artista salía como «Jerónimo
+Bosch» y en español se dice **El Bosco**; el Louvre estaba en
+**Saint-Germain-l'Auxerrois** y el MNAC en **Montjuïc**. Ninguno de los tres se
+podía arreglar con lo que había.
+
+**Lo que enseñó el primero.** La app pública NO pinta el campo canónico, pinta
+`coalesce(traducción, canónico)`. Como hasta entonces solo se editaba lo
+canónico, se podía escribir «El Bosco» en `artists.name`, guardar, y seguir
+viendo «Jerónimo Bosch» en la ficha sin ninguna pista de por qué. **Corregir sin
+efecto visible es peor que no poder corregir.** De ahí el bloque «Los textos,
+idioma a idioma» que ahora lleva toda ficha.
+
+**Lo que enseñó el segundo, midiendo antes de construir.** No es un museo
+suelto: de los 30 con más obras, **18 tenían como ciudad un barrio, un distrito
+o un municipio** —Manhattan, Innere Stadt, City of Westminster, Bezirk Mitte,
+«municipio de Estocolmo»—. Sale de `wdt:P131`, que da la entidad administrativa
+INMEDIATA. Se podría subir por la cadena de P131 hasta dar con algo de clase
+«ciudad», pero **son 48 museos**: la lista entera cabe en una pantalla. Cuando
+sean 500, se automatiza. Por eso `renombrar_ciudad()` cambia la ciudad en TODOS
+los museos que la comparten: «City of Westminster» son cuatro museos de Londres
+y arreglarlos de uno en uno deja el filtro público ofreciendo dos sitios donde
+hay uno.
+
+**Migración 0033.** `locked_fields` y el disparador de 0028 en instituciones,
+movimientos y las cuatro tablas de traducción; `editar_ficha()` para museos y
+movimientos, `editar_traduccion()` para los textos de cualquier entidad en
+cualquier idioma (crea la fila si no existe), y `renombrar_ciudad()`. La lista
+blanca vive en `campos_editables(tabla)`: sin ella, recibir el nombre de la
+tabla desde un formulario sería poder escribir en cualquier tabla del esquema.
+`slug` y `location` quedan fuera a propósito —el primero es la URL pública, el
+segundo está copiado en cada obra del museo—.
+
+En `artwork_translations` el nombre del disparador importa: `respetar…` va antes
+que `…search_update` por orden alfabético, que es justo lo que hace falta —
+primero se restaura el título corregido y después se indexa ESE título.
+
+**Pantallas.** `/es/admin/catalogo` es el menú; museos, ciudades y movimientos
+tienen lista completa, los artistas van de cien en cien y las obras siguen
+entrando por el buscador (son 269.000). Las listas existen para lo que el
+buscador no puede hacer: **encontrar lo que está mal sin sospecharlo antes.** Lo
+de las ciudades no se descubrió buscando ningún museo, se descubrió mirando la
+lista entera de un vistazo.
+
+**Comprobado por el camino del usuario**, con `next start` en el 3112 y un
+navegador con sesión de administrador: las siete pantallas responden, se edita
+un campo y se guarda, se suelta y vuelve a mandar Wikidata, y una escritura con
+`service_role` —la ingesta— **no pisa** lo corregido pero **sí** cambia lo que
+nadie tocó. La ficha pública del Bosco ya dice «El Bosco» y la del MNAC,
+Barcelona.
+
+**Quedan 16 ciudades mal**, todas de un clic en `/es/admin/catalogo/ciudades`:
+Manhattan (Met, MoMA, Guggenheim, Whitney) → Nueva York; City of Westminster
+(National Gallery, Wallace, Courtauld, Tate Britain) y London Borough of
+Southwark (Tate Modern) → Londres; Innere Stadt → Viena; Bezirk Mitte →
+Berlín; Maxvorstadt → Múnich; 7th arrondissement of Paris → París; municipio de
+Estocolmo, de Copenhague, City of Edinburgh, City of Melbourne, Roma Capitale,
+Brussels-Capital Region, Ueno-kōen → Tokio. Y `Firenze` y `Florence` son la
+misma ciudad partida en dos.
+
+---
+
 ## Otras cosas pendientes
 
 ### Los cinco conectores de imágenes que quedaron aparcados
@@ -807,6 +871,18 @@ Las mediciones de red se hacen con la máquina en reposo.
 lanzada en segundo plano no se puede cortar desde aquí ni con `TaskStop` —el
 proceso hijo sobrevive—. Si hay que pararla, es cosa del Administrador de
 tareas. Conviene tenerlo en cuenta ANTES de lanzar algo de nueve horas.
+
+**La app enseña la traducción, no el campo canónico.** Todo lo que se ve
+—títulos, nombres de artista, de museo, de movimiento, ciudades— sale de
+`coalesce(traducción del idioma, inglés, canónico)`. Un formulario que solo
+edite lo canónico parece funcionar y no cambia nada de lo que se lee. Pasó con
+«El Bosco» y es la razón de que exista el bloque de idiomas.
+
+**Un recuento estimado del planificador puede mentir en un tercio.** El menú del
+catálogo pedía `count: 'estimated'` para las obras y decía 172.776 cuando había
+269.159: las estadísticas de Postgres envejecen entre ingesta e ingesta. Exacto
+tampoco se puede —se come los 3 s del rol—, así que ese número simplemente no se
+enseña. Un número que miente es peor que ninguno.
 
 **`ANALYZE` después de una ingesta grande.** Tras meter 100.000 filas, Postgres
 seguía planificando como si la tabla tuviera 6.000. Ahora lo hace la propia

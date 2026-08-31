@@ -1,10 +1,14 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { isLang, type Lang } from '@/lib/i18n';
+import { isLang, LANGS, type Lang } from '@/lib/i18n';
 import { requireAdmin, supabaseServer } from '@/lib/auth';
 import { path } from '@/lib/routes';
 import Ficha from '../../Ficha';
-import { CAMPOS_OBRA, soloLoCambiado } from '../../campos';
+import Traducciones from '../../Traducciones';
+import {
+  CAMPOS_OBRA, CAMPOS_TRAD_OBRA, soloLoCambiado, traduccionesCambiadas,
+  type Traduccion,
+} from '../../campos';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +50,16 @@ export default async function CorregirObra({ params, searchParams }: Props) {
 
   if (!creando && !obra) notFound();
 
+  /*
+   * El título de arriba es el canónico; el que lee un visitante sale de
+   * `artwork_translations`. Una obra que espera datos no tiene ninguna fila
+   * —se guardan sin traducir para ahorrar espacio—, y entonces el bloque de
+   * idiomas sale vacío y las crea al guardarlas.
+   */
+  const { data: traducciones } = creando
+    ? { data: [] }
+    : await db.from('artwork_translations').select('*').eq('artwork_id', numero!);
+
   const defendidos: string[] = [
     ...((obra?.locked_fields as string[] | null) ?? []),
     // El estado tiene su propio guardián desde 0008, pero para quien mira la
@@ -75,15 +89,37 @@ export default async function CorregirObra({ params, searchParams }: Props) {
      * originales: entre pintar el formulario y guardarlo puede haber pasado una
      * ingesta entera, y lo que hay que comparar es contra lo que hay AHORA.
      */
-    const { data: actual } = await server.from('artworks').select('*').eq('id', numero!).single();
+    const [{ data: actual }, { data: actuales }] = await Promise.all([
+      server.from('artworks').select('*').eq('id', numero!).single(),
+      server.from('artwork_translations').select('*').eq('artwork_id', numero!),
+    ]);
+
     const cambios = soloLoCambiado(CAMPOS_OBRA, formData, actual ?? {});
 
-    const { error: err } = await server.rpc('edit_artwork', {
-      p_id: numero, p_cambios: cambios, p_soltar: soltar,
-    });
-
     const base = `${path(idioma, 'admin')}/corregir/obra/${numero}`;
-    redirect(err ? `${base}?error=${encodeURIComponent(err.message)}` : `${base}?guardado=1`);
+    let fallo: string | null = null;
+
+    if (Object.keys(cambios).length > 0 || soltar.length > 0) {
+      const { error: err } = await server.rpc('edit_artwork', {
+        p_id: numero, p_cambios: cambios, p_soltar: soltar,
+      });
+      fallo = err?.message ?? null;
+    }
+
+    const porIdioma = traduccionesCambiadas(
+      CAMPOS_TRAD_OBRA, LANGS, formData, (actuales ?? []) as Traduccion[],
+    );
+
+    for (const t of porIdioma) {
+      if (fallo) break;
+      const { error: err } = await server.rpc('editar_traduccion', {
+        p_entidad: 'artwork', p_id: numero, p_lang: t.lang,
+        p_cambios: t.cambios, p_soltar: t.soltar,
+      });
+      fallo = err?.message ?? null;
+    }
+
+    redirect(fallo ? `${base}?error=${encodeURIComponent(fallo)}` : `${base}?guardado=1`);
   }
 
   return (
@@ -122,6 +158,9 @@ export default async function CorregirObra({ params, searchParams }: Props) {
           valores={(obra as Record<string, unknown> | null) ?? {}}
           defendidos={defendidos}
         />
+
+        {/* Al crear no hay idiomas: la obra aún no tiene id al que colgarlos. */}
+        {!creando && <Traducciones campos={CAMPOS_TRAD_OBRA} filas={(traducciones ?? []) as Traduccion[]} />}
 
         <div style={{ display: 'flex', gap: 10, padding: '18px 0 40px' }}>
           <button className="btn btn-primary" type="submit">

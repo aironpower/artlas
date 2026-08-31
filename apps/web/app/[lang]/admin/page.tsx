@@ -66,6 +66,10 @@ export default async function AdminPage({ params }: Props) {
       <section style={{ paddingTop: 26 }}>
         <h2>Corregir a mano</h2>
         <p className="muted small" style={{ margin: '10px 0 0' }}>
+          <Link href={`${path(lang, 'admin')}/catalogo`}>Museos, ciudades, movimientos y artistas</Link>
+          {' · '}las listas, para encontrar lo que está mal sin saberlo de antemano.
+        </p>
+        <p className="muted small" style={{ margin: '6px 0 0' }}>
           <Link href={`${path(lang, 'admin')}/corregir`}>Buscar una obra o un artista</Link>
           {' · '}lo que corrijas queda defendido de la ingesta.
         </p>

@@ -38,6 +38,8 @@ export const NOMBRES: Record<string, string> = {
   photograph: 'fotografía', installation: 'instalación', decorative: 'artes decorativas',
   other: 'otra',
   public_domain: 'dominio público', in_copyright: 'con derechos', unknown: 'sin averiguar',
+  museum: 'museo', gallery: 'galería', church: 'iglesia', palace: 'palacio',
+  public_space: 'espacio público', private: 'colección privada',
 };
 
 export const CAMPOS_OBRA: readonly Campo[] = [
@@ -117,4 +119,125 @@ export function soloLoCambiado(
   }
 
   return cambios;
+}
+
+/* ---------------------------------------------------------------------------
+ * Museos, movimientos y traducciones (0033)
+ *
+ * Las listas de aquí abajo tienen que coincidir con `campos_editables()` de la
+ * base. Si aquí sobra un campo, la base lo rechaza por su nombre; si falta, no
+ * se puede corregir desde la web.
+ * ------------------------------------------------------------------------- */
+
+/** Los valores del `check` de `institutions.kind`, mirados en 0001. */
+export const CLASES = [
+  'museum', 'gallery', 'church', 'palace', 'public_space', 'private', 'other',
+] as const;
+
+export const CAMPOS_MUSEO: readonly Campo[] = [
+  { nombre: 'name', etiqueta: 'Nombre', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'kind', etiqueta: 'Qué es', tipo: 'lista', opciones: CLASES, ancho: 'medio' },
+  {
+    nombre: 'city', etiqueta: 'Ciudad', tipo: 'texto', ancho: 'medio',
+    pie: 'La ciudad, no el barrio: Wikidata da «Montjuïc» donde debería decir Barcelona.',
+  },
+  { nombre: 'region', etiqueta: 'Región', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'country', etiqueta: 'País', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'country_code', etiqueta: 'País (2 letras)', tipo: 'texto', ancho: 'corto' },
+  { nombre: 'address', etiqueta: 'Dirección', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'website', etiqueta: 'Web', tipo: 'url', ancho: 'largo' },
+  { nombre: 'image_url', etiqueta: 'Foto', tipo: 'url', ancho: 'largo' },
+  {
+    nombre: 'visitors_year', etiqueta: 'Visitantes al año', tipo: 'numero', ancho: 'medio',
+    pie: 'Ordena los museos por relevancia cuando no hay nada mejor.',
+  },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+export const CAMPOS_MOVIMIENTO: readonly Campo[] = [
+  { nombre: 'name', etiqueta: 'Nombre', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'start_year', etiqueta: 'Desde', tipo: 'numero', ancho: 'corto' },
+  { nombre: 'end_year', etiqueta: 'Hasta', tipo: 'numero', ancho: 'corto' },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+/*
+ * Lo que se traduce de cada cosa. Es MENOS de lo que se puede editar en la
+ * ficha canónica, a propósito: un año o una URL no cambian con el idioma, y
+ * ofrecerlos por idioma invita a que se desincronicen.
+ */
+export const CAMPOS_TRAD_OBRA: readonly Campo[] = [
+  { nombre: 'title', etiqueta: 'Título', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'medium', etiqueta: 'Técnica', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'genre', etiqueta: 'Género', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+export const CAMPOS_TRAD_ARTISTA: readonly Campo[] = [
+  { nombre: 'name', etiqueta: 'Nombre', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+export const CAMPOS_TRAD_MUSEO: readonly Campo[] = [
+  { nombre: 'name', etiqueta: 'Nombre', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'city', etiqueta: 'Ciudad', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'country', etiqueta: 'País', tipo: 'texto', ancho: 'medio' },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+export const CAMPOS_TRAD_MOVIMIENTO: readonly Campo[] = [
+  { nombre: 'name', etiqueta: 'Nombre', tipo: 'texto', ancho: 'largo' },
+  { nombre: 'description', etiqueta: 'Descripción', tipo: 'largo', ancho: 'largo' },
+];
+
+/** Una fila de traducción tal y como la lee y la escribe el formulario. */
+export interface Traduccion {
+  lang: string;
+  locked_fields?: string[] | null;
+  [campo: string]: unknown;
+}
+
+/** El prefijo con el que viajan los campos traducidos en el formulario. */
+export const campoTraducido = (lang: string, campo: string) => `t.${lang}.${campo}`;
+
+/**
+ * Lo que ha cambiado en cada idioma, comparando con lo guardado.
+ *
+ * Mismo criterio que `soloLoCambiado()` y por el mismo motivo: si se enviaran
+ * todos los campos de todos los idiomas, abrir el formulario y guardarlo
+ * congelaría el catálogo entero frente a Wikidata. Aquí se devuelve un idioma
+ * solo si algo suyo cambió de verdad.
+ */
+export function traduccionesCambiadas(
+  campos: readonly Campo[],
+  idiomas: readonly string[],
+  formulario: FormData,
+  actuales: Traduccion[],
+): { lang: string; cambios: Record<string, string | null>; soltar: string[] }[] {
+  const salida: { lang: string; cambios: Record<string, string | null>; soltar: string[] }[] = [];
+
+  for (const lang of idiomas) {
+    const fila = actuales.find((t) => t.lang === lang) ?? { lang };
+    const cambios: Record<string, string | null> = {};
+
+    for (const campo of campos) {
+      const bruto = formulario.get(campoTraducido(lang, campo.nombre));
+      if (bruto === null) continue;
+
+      const nuevo = String(bruto).trim();
+      const viejo = fila[campo.nombre] === null || fila[campo.nombre] === undefined
+        ? ''
+        : String(fila[campo.nombre]);
+
+      if (nuevo !== viejo) cambios[campo.nombre] = nuevo === '' ? null : nuevo;
+    }
+
+    const soltar = formulario.getAll(`soltar.${lang}`).map(String);
+
+    if (Object.keys(cambios).length > 0 || soltar.length > 0) {
+      salida.push({ lang, cambios, soltar });
+    }
+  }
+
+  return salida;
 }

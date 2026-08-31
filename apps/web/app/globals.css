@@ -524,6 +524,15 @@ option::checkmark { display: none; }
   margin-top: 5px; font-size: 0.78rem;
 }
 
+/*
+ * Un bloque por idioma dentro de la misma ficha. Se separan con una línea y no
+ * con pestañas a propósito: hay que poder ver el español y el inglés a la vez
+ * para notar que uno de los dos se quedó sin traducir.
+ */
+.idioma { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--border); }
+.idioma h3 { margin: 0; font-size: 0.95rem; }
+.idioma .ficha { padding-top: 10px; }
+
 .aviso { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0 0; font-size: 0.9rem; }
 .aviso-bien { background: color-mix(in srgb, var(--muted) 12%, transparent); color: var(--text); }
 .aviso-mal { background: var(--accent-soft); color: var(--accent); }
