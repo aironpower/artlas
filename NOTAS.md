@@ -53,9 +53,20 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
      movimientos fechados. No es el 100% y no puede serlo: Wikidata no da fecha
      para los otros. Donde se mira sí llega — quince de los veinte con más obras.
 
-4. **Del repaso visual queda una cosa**: las **View Transitions** con precarga
-   al pasar el ratón. Lo de limpiar los títulos **se ha medido y NO hay que
-   hacerlo** — sección propia más abajo, porque el motivo importa.
+4. ~~**Del repaso visual**~~ **CERRADO, y sin escribir casi nada.** Los dos
+   puntos que quedaban se midieron y ninguno había que hacerlo:
+
+   - **Limpiar los títulos**: NO. Sección propia más abajo — arreglaría 6 obras
+     y rompería 2.035.
+   - **View Transitions con precarga**: tampoco. Las View Transitions ya se
+     habían descartado a propósito y está escrito en `app/[lang]/template.tsx`
+     (en Next son experimentales y arrastran React experimental). Y la precarga
+     no compensa: abrir una obra ya tarda **175 ms** en caliente, así que
+     ahorraría eso. Los esqueletos de carga ya están en las cuatro rutas
+     pesadas.
+
+   Midiendo esto salió lo que sí era un problema: **«cerca de mí» tardaba
+   2.383 ms** con el aviso puesto por `check-perf`. Arreglado en la `0040`.
 
 5. **Decisiones que Manuel tiene pendientes, no trabajo:**
    - ¿Puede registrarse cualquiera? Hoy sí: con un correo válido se crea perfil
@@ -459,6 +470,61 @@ hay una consulta de cinco minutos, y en este caso la diferencia era 6 contra
 Si algún día se retoma, lo que sí tiene sentido es lo estrecho: quitar el
 paréntesis **solo** cuando su contenido es exactamente el nombre del autor de la
 obra. Son seis, se arreglan a mano desde el panel y no hace falta código.
+
+---
+
+## «Cerca de mí», de 2.383 ms a 274 (1 de septiembre de 2026)
+
+`check-perf` llevaba tiempo marcando esta consulta con un `!`, y nadie había
+ido a ver por qué:
+
+```
+!   2383 ms  cerca de mí (Prado, 2 km)    60 filas
+```
+
+El rol `anon` corta a los 3.000 ms. O sea que **la función que sostiene el
+mapa —que es el producto— trabajaba al 79% de su presupuesto**, y un día malo
+la habría dejado sin responder.
+
+En caliente iba a 170 ms, así que los 2.383 eran caché fría. Pero lo que la
+hacía cara en frío estaba en el plan, en una cifra sola:
+
+```
+Buffers: shared hit=91888
+```
+
+**718 MB de lecturas lógicas para devolver 60 obras.** El filtro espacial no era
+el problema: resuelve en 83 ms. Lo caro era que las cuatro tablas de
+traducciones se unían a las **4.663 candidatas** que caen dentro del radio, y el
+`limit 60` se aplicaba al final. Se traducían 4.663 obras para enseñar 60.
+
+La `0040` lo parte en dos pasos —primero quiénes, mirando solo `artworks`;
+después cómo se llaman— que es literalmente lo que la `0025` le hizo a la
+paginación del buscador por el mismo motivo. Medido:
+
+| | antes | después |
+|---|---|---|
+| Prado, 2 km | 170 ms · 91.888 buffers | **79 ms · 34.975** |
+| Nueva York, 5 km | 423 ms · 236.844 | **107 ms · 100.245** |
+| `check-perf` en frío | 2.383 ms `!` | **274 ms ✓** |
+
+Los buffers son la cifra honesta —no dependen de la caché—: entre un 58% y un
+75% menos de trabajo. Nueva York es el caso que más se beneficia, porque cuanto
+mayor el radio y más museos alrededor, más candidatas se traducían para nada.
+
+### Dos cosas que hubo que cuidar
+
+**El filtro por movimiento va DENTRO del primer paso.** Si se aplicara después
+del `limit`, pedir «impresionismo cerca de mí» devolvería las impresionistas que
+hubiera entre las 60 más cercanas, en vez de las 60 impresionistas más cercanas.
+Es la trampa de partir una consulta en dos.
+
+**Y se añadió `a.id` al desempate.** Todas las obras de un museo comparten su
+punto, así que comparten distancia; con la misma `notability`, el `limit 60`
+se quedaba con sesenta cualesquiera. Comprobado antes de dar la migración por
+buena: de las 60 del Prado cambian 3, y las 3 que entran **empatan exactamente
+en notoriedad y distancia** con las 3 que salen. No entra ninguna obra peor;
+lo que cambia es que ahora dos llamadas iguales devuelven lo mismo.
 
 ---
 
