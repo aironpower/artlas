@@ -70,9 +70,26 @@ En el panel de Supabase, **Authentication > URL Configuration**:
 - Site URL: `https://artlas.softie.dev`
 - Redirect URLs: añadir `https://artlas.softie.dev/api/auth/callback`
 
-Sin esto el enlace mágico llega al correo pero Supabase rechaza la vuelta, y el
-panel no deja entrar a nadie. Dejar también la de `localhost:3111` para seguir
-trabajando en local.
+Sin esto el correo llega pero Supabase rechaza la vuelta, y no deja entrar a
+nadie. Dejar también la de local para seguir trabajando.
+
+### 5. Google y GitHub
+
+Encendidos desde el 1 de septiembre de 2026. Sus aplicaciones OAuth apuntan a
+**Supabase, no a Artlas**, así que un dominio nuevo no obliga a tocarlas: la
+URL de vuelta que llevan registrada es siempre
+
+```
+https://glbkxwccqauxhfqusfrn.supabase.co/auth/v1/callback
+```
+
+Lo que sí hay que actualizar con un dominio nuevo son las Redirect URLs del
+paso 4, que es donde Supabase decide si puede devolver a `artlas.softie.dev`.
+
+En Google Cloud esa URL va en **URIs de redireccionamiento autorizados**, con
+la ruta entera. El campo de encima, «Orígenes autorizados de JavaScript», lleva
+el dominio pelado y no admite rutas: rellenar los dos igual es el error que dio
+`redirect_uri_mismatch` la primera vez.
 
 ---
 

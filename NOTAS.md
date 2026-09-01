@@ -597,12 +597,48 @@ Configuración del proyecto Supabase, comprobada el 1 de septiembre:
 
 - **Registro abierto**: sí (lo abrió Manuel esa tarde).
 - **Confirmación de correo**: activada.
-- **Google y GitHub**: **APAGADOS**. Los botones están, pero hasta que se creen
-  las aplicaciones OAuth y se peguen sus credenciales en Supabase, pulsarlos
-  enseña «no se ha podido entrar». Eso sale de `conProveedor`, que detecta el
-  proveedor apagado ANTES de salir de la web.
+- **Google y GitHub**: **encendidos el 1 de septiembre de 2026 por la noche**,
+  con sus aplicaciones OAuth creadas y las credenciales pegadas en Supabase.
+  Si algún día vuelven a apagarse, pulsarlos enseña «no se ha podido entrar»:
+  sale de `conProveedor`, que detecta el proveedor apagado ANTES de salir de la
+  web.
 - **Redirect URLs**: tienen que incluir `http://localhost:3000/**` y
   `https://artlas.softie.dev/**`.
+
+**Google y GitHub no vuelven a Artlas, vuelven a Supabase.** La URL que piden
+los dos paneles es la misma y no lleva nuestro dominio:
+
+```
+https://<ref>.supabase.co/auth/v1/callback
+```
+
+Eso resuelve de paso el único campo de vuelta que admite GitHub: local y
+producción comparten esa URL, así que no hay que elegir. Nuestro
+`/api/auth/callback` es el salto siguiente y solo lo conoce Supabase, por la
+lista de Redirect URLs.
+
+**Y ahí estuvo el único tropiezo.** En Google Cloud hay dos campos seguidos,
+«Orígenes autorizados de JavaScript» y «URIs de redireccionamiento
+autorizados», y el de arriba NO admite rutas. Pegar el origen pelado en los dos
+—`https://<ref>.supabase.co` sin `/auth/v1/callback`— parece correcto y da
+`redirect_uri_mismatch` con «Acceso bloqueado», sin más explicación.
+
+### Comprobarlo sin abrir el navegador
+
+Dos preguntas a Supabase valen por toda la prueba manual, y distinguen
+«apagado» de «mal configurado», que es la distinción que cuesta a ojo:
+
+```bash
+# ¿Los ve encendidos Supabase?
+curl -s "https://<ref>.supabase.co/auth/v1/settings" -H "apikey: $ANON"
+
+# ¿Los acepta el proveedor? Sigue la redirección hasta Google o GitHub.
+curl -sL "https://<ref>.supabase.co/auth/v1/authorize?provider=google&redirect_to=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback"   -H "apikey: $ANON" | grep -oiE "redirect_uri_mismatch|<title>[^<]*</title>"
+```
+
+Acabar en la pantalla de identificarse del proveedor es que las credenciales
+valen. No hace falta llegar a entrar: lo que se está probando es el ID de
+cliente y la URL de vuelta, y eso se decide antes de teclear una contraseña.
 
 **El límite de correos es el problema práctico, y ya se ha visto.** Probando,
 un alta consumió el cupo y la siguiente murió con `429
