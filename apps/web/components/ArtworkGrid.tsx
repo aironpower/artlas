@@ -26,8 +26,25 @@ export default function ArtworkGrid({ items, lang }: { items: GridItem[]; lang: 
     return <p className="empty">{t(lang, 'noResults')}</p>;
   }
 
+  return <div className="grid"><TarjetasObra items={items} lang={lang} /></div>;
+}
+
+/**
+ * Las tarjetas sueltas, sin la rejilla que las contiene.
+ *
+ * Existe para el scroll infinito del museo, y por un motivo de maquetación y
+ * no de gusto: si cada lote trajera su propio `.grid`, cada uno calcularía sus
+ * columnas por separado y añadiría sus 24 px de relleno. Con `auto-fill`, un
+ * lote de 36 en una pantalla de cinco columnas deja la última fila con una
+ * sola tarjeta, y el lote siguiente empieza debajo: un agujero en mitad de la
+ * lista, justo donde el scroll pretendía no notarse.
+ *
+ * Con una sola rejilla y las tarjetas metidas dentro, las 36 nuevas caen en el
+ * hueco que quedaba y no hay costura.
+ */
+export function TarjetasObra({ items, lang }: { items: GridItem[]; lang: Lang }) {
   return (
-    <div className="grid">
+    <>
       {items.map((item) => (
         <Link key={item.id} href={path(lang, 'artwork', item.id)} className="card">
           {/* <img> y no next/image a propósito: las imágenes de Commons vienen
@@ -55,6 +72,6 @@ export default function ArtworkGrid({ items, lang }: { items: GridItem[]; lang: 
           )}
         </Link>
       ))}
-    </div>
+    </>
   );
 }

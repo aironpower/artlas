@@ -2,9 +2,10 @@ import { notFound } from 'next/navigation';
 import { isLang, t, formatNumber } from '@/lib/i18n';
 import { supabase, artworksByInstitution } from '@/lib/data';
 import { path } from '@/lib/routes';
-import ArtworkGrid from '@/components/ArtworkGrid';
+import ArtworkGrid, { TarjetasObra } from '@/components/ArtworkGrid';
 import WorldMap from '@/components/WorldMap';
 import Paginacion, { leerPagina } from '@/components/Paginacion';
+import MasAlLlegarAbajo from '@/components/MasAlLlegarAbajo';
 
 export const revalidate = 3600;
 
@@ -53,6 +54,7 @@ export default async function MuseumPage({ params, searchParams }: Props) {
   // barato que contar, y es lo único que la paginación necesita saber.
   const lote = await artworksByInstitution(lang, slug, POR_PAGINA + 1, (pagina - 1) * POR_PAGINA);
   const works = lote.slice(0, POR_PAGINA);
+  const hayMas = lote.length > POR_PAGINA;
 
   /*
    * Una página más allá del final no es una página vacía: no existe. Se mira
@@ -83,15 +85,45 @@ export default async function MuseumPage({ params, searchParams }: Props) {
 
       <section style={{ paddingTop: 28 }}>
         <h2>{t(lang, 'worksHere')}</h2>
-        <ArtworkGrid lang={lang} items={works} />
-        <Paginacion
-          lang={lang}
-          page={pagina}
-          hasNext={lote.length > POR_PAGINA}
-          basePath={path(lang, 'museum', slug)}
-          total={inst.artwork_count}
-          pageSize={POR_PAGINA}
-        />
+        {/*
+          * La lista sigue sola al llegar abajo, y todo cae en UNA sola rejilla:
+          * las tarjetas del primer lote, las que trae el scroll y el aviso. Un
+          * `.grid` por lote calcularía sus columnas aparte y dejaría un hueco
+          * en mitad de la lista, justo donde el scroll pretende no notarse.
+          *
+          * La `Paginacion` no desaparece: va dentro, pintada en el servidor
+          * —así su enlace a la página siguiente está en el HTML, para quien no
+          * ejecuta JavaScript y para quien indexa— y solo se esconde cuando el
+          * scroll ha demostrado que puede sustituirla.
+          */}
+        {hayMas ? (
+          <div className="grid">
+            <TarjetasObra lang={lang} items={works} />
+            <MasAlLlegarAbajo
+              lang={lang}
+              slug={slug}
+              desdePagina={pagina + 1}
+              basePath={path(lang, 'museum', slug)}
+            >
+              <Paginacion
+                lang={lang} page={pagina} hasNext
+                basePath={path(lang, 'museum', slug)}
+                total={inst.artwork_count} pageSize={POR_PAGINA}
+              />
+            </MasAlLlegarAbajo>
+          </div>
+        ) : (
+          /* Última página: no hay nada que traer, así que no se monta el
+             observador. Queda el «Anterior» de siempre. */
+          <>
+            <ArtworkGrid lang={lang} items={works} />
+            <Paginacion
+              lang={lang} page={pagina} hasNext={false}
+              basePath={path(lang, 'museum', slug)}
+              total={inst.artwork_count} pageSize={POR_PAGINA}
+            />
+          </>
+        )}
       </section>
     </>
   );
