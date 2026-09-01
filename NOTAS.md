@@ -53,9 +53,9 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
      movimientos fechados. No es el 100% y no puede serlo: Wikidata no da fecha
      para los otros. Donde se mira sí llega — quince de los veinte con más obras.
 
-4. **Del repaso visual quedan dos cosas**: limpiar el ruido de los títulos de
-   Wikidata («El columpio (Goya)») y las **View Transitions** con precarga al
-   pasar el ratón. Todo lo demás está hecho.
+4. **Del repaso visual queda una cosa**: las **View Transitions** con precarga
+   al pasar el ratón. Lo de limpiar los títulos **se ha medido y NO hay que
+   hacerlo** — sección propia más abajo, porque el motivo importa.
 
 5. **Decisiones que Manuel tiene pendientes, no trabajo:**
    - ¿Puede registrarse cualquiera? Hoy sí: con un correo válido se crea perfil
@@ -416,6 +416,49 @@ npm run fill-movement-years -- --apply   # lo escribe
 **Después de una ingesta que traiga movimientos nuevos, hay que volver a
 pasarlo.** Es idempotente —la segunda pasada dice «0 con fecha nueva, 108 ya la
 tenían igual»— y cuesta segundos.
+
+---
+
+## Los títulos con paréntesis: medido, y NO hay que tocarlos
+
+Esta tarea llevaba semanas en la lista como «limpiar el ruido de los títulos de
+Wikidata, del tipo *El columpio (Goya)*». **Medido el 1 de septiembre de 2026,
+haría muchísimo más daño que bien y se retira de la lista.**
+
+Las cifras, sobre las 135.258 publicadas:
+
+| | |
+|---|---|
+| Títulos que acaban en paréntesis | 8.902 |
+| De ellos, con el nombre de su autor dentro —el caso que motivó la tarea— | **6** |
+| Obras que quedarían con el título de otra si se les quitara | **2.035** |
+
+Seis. La tarea existía por un ejemplo suelto que resultó ser una rareza, no un
+patrón. Y el paréntesis casi nunca es ruido: es información que no está en
+ningún otro campo.
+
+```
+"Noce de Village (Village Wedding)"          la traducción del título
+"St Jude the Apostle (also known as ...)"    el nombre alternativo
+"... (from Cropsey Album)"                   la serie a la que pertenece
+"Portrait of Gustav Kh. Schele (1759/60-1820)" las fechas del retratado
+"... (recto)" / "... (verso)"                LAS DOS CARAS DE LA MISMA HOJA
+"... (1st)" / "... (2nd)"                    dos estados del mismo grabado
+```
+
+Los dos últimos son los que lo zanjan: **son lo único que distingue una obra de
+otra**. Quitarlos dejaría 80 obras llamadas «Page from a Dispersed Kalpa Sutra»
+en el mismo museo, 70 «Leaf from a Kalpa Sutra», 53 «Untitled»… y como el `slug`
+sale del título, también colisionarían sus URLs.
+
+**La lección, que vale más que la tarea:** el apunte venía de haber visto un
+título feo, no de haber contado. Entre «he visto un caso» y «esto es un patrón»
+hay una consulta de cinco minutos, y en este caso la diferencia era 6 contra
+2.035.
+
+Si algún día se retoma, lo que sí tiene sentido es lo estrecho: quitar el
+paréntesis **solo** cuando su contenido es exactamente el nombre del autor de la
+obra. Son seis, se arreglan a mano desde el panel y no hace falta código.
 
 ---
 
