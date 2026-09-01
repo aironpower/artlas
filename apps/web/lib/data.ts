@@ -176,6 +176,17 @@ export interface SearchFilters {
 
 // --- Consultas --------------------------------------------------------------
 
+/**
+ * La base ha cortado la búsqueda por tiempo.
+ *
+ * Tiene clase propia y no un `null` para que la pantalla pueda decir algo
+ * distinto de «no hay resultados»: no es que no haya, es que no se ha podido
+ * mirar. Decir «nada encontrado» ahí sería mentir.
+ */
+export class BusquedaDemasiadoAncha extends Error {
+  constructor() { super('la búsqueda ha superado el tiempo límite'); this.name = 'BusquedaDemasiadoAncha'; }
+}
+
 export async function searchArtworks(
   lang: Lang,
   filters: SearchFilters = {},
@@ -204,6 +215,19 @@ export async function searchArtworks(
     p_offset: filters.offset ?? 0,
   });
 
+  /*
+   * El corte de los 3 s NO es un error de programa: es una respuesta.
+   *
+   * Hasta el 2 de septiembre esto lanzaba, y lanzar en un componente de
+   * servidor tira la página entera: quien buscaba «portrait» veía
+   * «Application error: a server-side exception has occurred» y un digest.
+   * Es decir, el caso más ancho —el que más gente escribe— era el que peor
+   * se trataba. Ahora se distingue: `57014` es «no me ha dado tiempo», y eso
+   * la pantalla sabe contarlo sin romperse. Cualquier otro error sí lanza,
+   * porque sí es un fallo nuestro y esconderlo fue el error del 1 de
+   * septiembre en la pantalla de entrar.
+   */
+  if (error?.code === '57014') throw new BusquedaDemasiadoAncha();
   if (error) throw new Error(`búsqueda: ${error.message}`);
   return hideRestrictedImage((data ?? []) as ArtworkCard[]);
 }

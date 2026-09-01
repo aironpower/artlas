@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { isLang, t, formatNumber, type Lang } from '@/lib/i18n';
-import { searchArtworks, listMovements, listCountries, listCities } from '@/lib/data';
+import { searchArtworks, listMovements, listCountries, listCities, BusquedaDemasiadoAncha } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import Paginacion, { leerPagina } from '@/components/Paginacion';
@@ -53,12 +53,27 @@ export default async function SearchPage({ params, searchParams }: Params) {
     offset: (pagina - 1) * POR_PAGINA,
   };
 
-  const [lote, movements, countries] = await Promise.all([
-    searchArtworks(lang, filters),
+  /*
+   * La búsqueda puede no llegar a tiempo y los desplegables sí. Por eso se
+   * recoge aparte: si cayera todo junto, un corte de la base dejaría la
+   * pantalla sin filtros, que es justo lo que hace falta para arreglar la
+   * búsqueda que ha cortado. Se enseña la página entera, con sus filtros, y
+   * en el hueco de los resultados se explica qué ha pasado.
+   */
+  const [busqueda, movements, countries] = await Promise.all([
+    searchArtworks(lang, filters).then(
+      (lote) => ({ lote }),
+      (e) => {
+        if (e instanceof BusquedaDemasiadoAncha) return { lote: [], ancha: true as const };
+        throw e;
+      },
+    ),
     listMovements(lang),
     listCountries(lang),
   ]);
 
+  const lote = busqueda.lote;
+  const ancha = 'ancha' in busqueda;
   const results = lote.slice(0, POR_PAGINA);
   const hayMas = lote.length > POR_PAGINA;
 
@@ -67,7 +82,7 @@ export default async function SearchPage({ params, searchParams }: Params) {
    * lo que ha vuelto y no el contador, que se recalcula al terminar cada
    * ingesta y puede ir un rato por detrás de las filas.
    */
-  if (pagina > 1 && lote.length === 0) notFound();
+  if (pagina > 1 && lote.length === 0 && !ancha) notFound();
 
 
   return (
@@ -75,8 +90,7 @@ export default async function SearchPage({ params, searchParams }: Params) {
       <h1 style={{ paddingTop: 26 }}>
         {sp.q ? `“${sp.q}”` : t(lang, 'explore')}
         <span className="muted" style={{ fontSize: '1rem', fontWeight: 400, marginLeft: 10 }}>
-          {formatNumber(lang, results.length)}{hayMas && '+'}{' '}
-          {t(lang, 'artworks')}
+          {!ancha && <>{formatNumber(lang, results.length)}{hayMas && '+'}{' '}{t(lang, 'artworks')}</>}
         </span>
       </h1>
 
@@ -139,7 +153,9 @@ export default async function SearchPage({ params, searchParams }: Params) {
         <button className="btn btn-primary" type="submit">{t(lang, 'filters')}</button>
       </form>
 
-      <ArtworkGrid lang={lang} items={results} />
+      {ancha
+        ? <p className="aviso aviso-mal" style={{ marginTop: 18 }}>{t(lang, 'searchTooBroad')}</p>
+        : <ArtworkGrid lang={lang} items={results} />}
       <Paginacion
         lang={lang}
         page={pagina}
