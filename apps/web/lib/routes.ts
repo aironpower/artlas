@@ -43,8 +43,9 @@ export const SEGMENTS = {
    * `artistes`/`artiste`—, que es lo que `translatePath` necesita para no
    * confundirlos al traducir la URL.
    */
-  museums: { es: 'museos',   en: 'museums', fr: 'musees' },
-  artists: { es: 'artistas', en: 'artists', fr: 'artistes' },
+  museums:   { es: 'museos',      en: 'museums',   fr: 'musees' },
+  artists:   { es: 'artistas',    en: 'artists',   fr: 'artistes' },
+  movements: { es: 'movimientos', en: 'movements', fr: 'mouvements' },
 
   /* `admin` es igual en los tres idiomas, así que no genera reescritura. Y es
    * deliberado que no se traduzca: es una ruta de trabajo, no de producto. */
@@ -65,6 +66,7 @@ export const CANONICAL_SEGMENT: Record<Section, string> = {
   search: SEGMENTS.search.es,
   museums: SEGMENTS.museums.es,
   artists: SEGMENTS.artists.es,
+  movements: SEGMENTS.movements.es,
   admin: SEGMENTS.admin.es,
 };
 

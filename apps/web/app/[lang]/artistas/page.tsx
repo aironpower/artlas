@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { isLang, t, formatNumber, formatYears, type Lang } from '@/lib/i18n';
-import { listArtists } from '@/lib/data';
+import { listArtists, listNationalities } from '@/lib/data';
 import { path } from '@/lib/routes';
 import { Ordenable } from '@/components/Ordenable';
 import Paginacion from '@/components/Paginacion';
@@ -13,7 +13,10 @@ const POR_PAGINA = 60;
 
 interface Props {
   params: Promise<{ lang: string }>;
-  searchParams: Promise<{ q?: string; orden?: string; dir?: string; p?: string }>;
+  searchParams: Promise<{
+    q?: string; orden?: string; dir?: string; p?: string;
+    nat?: string; desde?: string; hasta?: string;
+  }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -41,13 +44,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  */
 export default async function Artistas({ params, searchParams }: Props) {
   const { lang } = await params;
-  const { q, orden = 'works', dir = 'desc', p } = await searchParams;
+  const { q, orden = 'works', dir = 'desc', p, nat, desde, hasta } = await searchParams;
   if (!isLang(lang)) notFound();
 
   const idioma: Lang = lang;
   const pagina = Math.max(1, Number(p) || 1);
   const sentido = dir === 'asc' ? 'asc' : 'desc';
   const busqueda = q?.trim() ?? '';
+
+  // Un año vacío o con letras no es «año 0»: es «no filtres por año».
+  const año = (v: string | undefined) => {
+    const n = Number(v);
+    return v && Number.isFinite(n) ? Math.trunc(n) : undefined;
+  };
+  const desdeAño = año(desde);
+  const hastaAño = año(hasta);
 
   /*
    * La lista blanca también aquí, y no solo en la base.
@@ -61,18 +72,33 @@ export default async function Artistas({ params, searchParams }: Props) {
     ? (orden as (typeof ORDENES)[number])
     : 'works';
 
-  const { artistas, total } = await listArtists(idioma, {
-    q: busqueda,
-    sort: campo,
-    dir: sentido,
-    limit: POR_PAGINA,
-    offset: (pagina - 1) * POR_PAGINA,
-  });
+  const [{ artistas, total }, nacionalidades] = await Promise.all([
+    listArtists(idioma, {
+      q: busqueda,
+      sort: campo,
+      dir: sentido,
+      limit: POR_PAGINA,
+      offset: (pagina - 1) * POR_PAGINA,
+      nat,
+      desde: desdeAño,
+      hasta: hastaAño,
+    }),
+    listNationalities(),
+  ]);
 
   const base = path(idioma, 'artists');
-  // Lo que hay que conservar al reordenar: la búsqueda sí, la página no —al
-  // cambiar de orden vuelves a la primera, que es lo que se espera—.
-  const extra = busqueda ? `q=${encodeURIComponent(busqueda)}` : '';
+
+  /*
+   * Lo que sobrevive a un cambio de orden: los filtros sí, la página no. Al
+   * reordenar se vuelve a la primera, que es lo que espera cualquiera; conservar
+   * la página 7 de un orden distinto es enseñar un trozo del medio sin motivo.
+   */
+  const filtros = { q: busqueda, nat, desde, hasta };
+  const extra = new URLSearchParams(
+    Object.entries(filtros).filter(([, v]) => v) as [string, string][],
+  ).toString();
+
+  const hayFiltro = Boolean(busqueda || nat || desde || hasta);
 
   return (
     <>
@@ -94,11 +120,38 @@ export default async function Artistas({ params, searchParams }: Props) {
           placeholder={t(idioma, 'searchArtists')}
           aria-label={t(idioma, 'searchArtists')}
         />
+
+        {/* La nacionalidad va en un desplegable y no en texto libre porque sale
+          * de Wikidata como etiqueta cerrada: escribir «Holanda» no encontraría
+          * «Dutch Republic». Y con el recuento al lado, que es lo que dice si
+          * merece la pena elegirla. */}
+        <select name="nat" defaultValue={nat ?? ''} aria-label={t(idioma, 'colNationality')}>
+          <option value="">{t(idioma, 'colNationality')}: —</option>
+          {nacionalidades.map((n) => (
+            <option key={n.nationality} value={n.nationality}>
+              {n.nationality} ({n.artists})
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="text" inputMode="numeric" name="desde" defaultValue={desde ?? ''}
+          className="anio" placeholder={t(idioma, 'from')} aria-label={`${t(idioma, 'bornBetween')} · ${t(idioma, 'from')}`}
+        />
+        <input
+          type="text" inputMode="numeric" name="hasta" defaultValue={hasta ?? ''}
+          className="anio" placeholder={t(idioma, 'to')} aria-label={`${t(idioma, 'bornBetween')} · ${t(idioma, 'to')}`}
+        />
+
         <input type="hidden" name="orden" value={campo} />
         <input type="hidden" name="dir" value={sentido} />
         <button className="btn btn-primary" type="submit">{t(idioma, 'searchAction')}</button>
-        {busqueda && <Link className="btn" href={base}>{t(idioma, 'clear')}</Link>}
+        {hayFiltro && <Link className="btn" href={base}>{t(idioma, 'clear')}</Link>}
       </form>
+
+      <p className="muted small" style={{ margin: '6px 0 0' }}>
+        {t(idioma, 'bornBetween')} · {t(idioma, 'yearsHint')}
+      </p>
 
       {artistas.length === 0 ? (
         <p className="aviso aviso-mal">{t(idioma, 'noArtists')}</p>
@@ -132,7 +185,7 @@ export default async function Artistas({ params, searchParams }: Props) {
         page={pagina}
         hasNext={pagina * POR_PAGINA < total}
         basePath={base}
-        params={{ q: busqueda || undefined, orden: campo, dir: sentido }}
+        params={{ ...filtros, orden: campo, dir: sentido }}
         total={total}
         pageSize={POR_PAGINA}
       />

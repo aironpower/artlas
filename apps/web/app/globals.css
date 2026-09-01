@@ -628,8 +628,20 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
 
 .tabla th:last-child { padding-right: 0; text-align: right; }
 
-.buscador-lista { display: flex; gap: 8px; align-items: center; padding-top: 14px; }
-.buscador-lista input[type="search"] { flex: 1 1 auto; min-width: 0; }
+/*
+ * La fila de filtros. `wrap` porque en cuanto entran el desplegable de
+ * nacionalidad y los dos años no caben en 390 px, y una fila que se parte se
+ * lee; una que se desborda, no.
+ */
+.buscador-lista {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 14px;
+}
+.buscador-lista input[type="search"] { flex: 1 1 220px; min-width: 0; }
+.buscador-lista select { flex: 0 1 auto; max-width: 220px; }
+
+/* Un año son cuatro cifras y un signo: más ancho solo invita a escribir otra
+   cosa. */
+.buscador-lista input.anio { flex: 0 0 5.5em; width: 5.5em; text-align: center; }
 
 /*
  * En un teléfono, una columna se va.
@@ -656,11 +668,16 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
  * otra vez sin espacio. Una segunda fila fina no le quita nada a nadie.
  */
 .secciones {
-  display: flex; gap: 18px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
   padding: 8px 0 0; font-size: 0.86rem;
 }
 
-.secciones a { color: var(--muted); text-decoration: none; }
+/* Los textos vienen en minúscula del diccionario, que es como se usan dentro de
+   una frase («48 museos»). Aquí encabezan, así que se les pone la mayúscula
+   desde el estilo en vez de duplicar siete traducciones por una letra. */
+.secciones a {
+  color: var(--muted); text-decoration: none; text-transform: capitalize;
+}
 .secciones a:hover { color: var(--accent); }
 
 /* --- La rejilla en el móvil ------------------------------------------------

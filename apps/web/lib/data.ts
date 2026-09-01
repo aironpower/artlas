@@ -523,9 +523,15 @@ export async function listArtists(
     dir?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
+    nat?: string;
+    desde?: number;
+    hasta?: number;
   } = {},
 ) {
-  const { q = '', sort = 'works', dir = 'desc', limit = 60, offset = 0 } = opciones;
+  const {
+    q = '', sort = 'works', dir = 'desc', limit = 60, offset = 0,
+    nat, desde, hasta,
+  } = opciones;
 
   const { data, error } = await db().rpc('list_artists', {
     p_lang: lang,
@@ -534,6 +540,9 @@ export async function listArtists(
     p_dir: dir,
     p_limit: limit,
     p_offset: offset,
+    p_nat: nat || null,
+    p_desde: Number.isFinite(desde) ? desde : null,
+    p_hasta: Number.isFinite(hasta) ? hasta : null,
   });
 
   if (error) throw new Error(`artistas: ${error.message}`);
@@ -557,6 +566,39 @@ export async function listArtists(
     // que es justo lo que significa una búsqueda sin resultados.
     total: Number(filas[0]?.total ?? 0),
   };
+}
+
+/** Las nacionalidades del catálogo, con su recuento, para el desplegable. */
+export async function listNationalities() {
+  const { data, error } = await db().rpc('list_nationalities');
+  if (error) throw new Error(`nacionalidades: ${error.message}`);
+
+  return (data ?? []) as { nationality: string; artists: number }[];
+}
+
+/**
+ * Todos los movimientos con obra, para su índice.
+ *
+ * Aparte de `listMovements`, que se queda en 40 porque alimenta un desplegable
+ * y una lista de 187 opciones no se recorre con el ratón. Aquí sí se quieren
+ * todos: es la página que existe para verlos.
+ */
+export async function listAllMovements(lang: Lang) {
+  const { data, error } = await db()
+    .from('movements')
+    .select('slug, name, start_year, end_year, artwork_count, movement_translations ( lang, name )')
+    .gt('artwork_count', 0)
+    .order('artwork_count', { ascending: false });
+
+  if (error) throw new Error(`movimientos: ${error.message}`);
+
+  return (data ?? []).map((m: any) => ({
+    slug: m.slug as string,
+    name: capitalize(pick(m.movement_translations, lang)?.name ?? m.name),
+    startYear: m.start_year as number | null,
+    endYear: m.end_year as number | null,
+    count: m.artwork_count as number,
+  }));
 }
 
 /**

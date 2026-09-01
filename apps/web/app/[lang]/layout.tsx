@@ -59,8 +59,16 @@ export default async function LangLayout(
           * museos y artistas solo se llegaba de rebote.
           */}
         <nav className="shell secciones" aria-label={t(lang, 'explore')}>
-          <Link href={path(lang, 'museums')}>{t(lang, 'allMuseums')}</Link>
-          <Link href={path(lang, 'artists')}>{t(lang, 'allArtists')}</Link>
+          {/*
+            * Las etiquetas cortas —«Museos», no «Todos los museos»—. Con cuatro
+            * secciones, las largas se salían de un teléfono de 390 px y
+            * «Buscar» quedaba cortado contra el borde. En una barra de
+            * navegación el sustantivo basta: el «todos» ya lo dice el estar
+            * ahí. Las largas siguen sirviendo de título dentro de cada página.
+            */}
+          <Link href={path(lang, 'museums')}>{t(lang, 'museums')}</Link>
+          <Link href={path(lang, 'artists')}>{t(lang, 'artists')}</Link>
+          <Link href={path(lang, 'movements')}>{t(lang, 'movements')}</Link>
           <Link href={path(lang, 'search')}>{t(lang, 'searchAction')}</Link>
         </nav>
 

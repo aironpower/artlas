@@ -557,9 +557,53 @@ arriba: allí ya se reparten el sitio el logo, el buscador y tres idiomas, y en
 un teléfono de 390 px al buscador le quedaban 40 px. Dos enlaces más lo dejarían
 otra vez sin espacio.
 
+### Filtros de artista y la lista de movimientos
+
+Pedido a continuación: «filtrar autor por nacionalidad o fecha» y «una lista de
+movimientos».
+
+**Nacionalidad, en desplegable y no en texto libre.** Sale de Wikidata como
+etiqueta cerrada, así que escribir «Holanda» no encontraría «Dutch Republic».
+Son 220 distintas, ordenadas por número de artistas —lo que alguien busca está
+casi siempre entre las diez primeras, y 81 tienen un solo artista—. Se compara
+por igualdad y no con `ilike`: un `ilike` haría que «Netherlands» arrastrara
+«Southern Netherlands», que es otro sitio y otro siglo.
+
+**La fecha es el AÑO DE NACIMIENTO**, no el de muerte ni un solapamiento de
+vidas. Es lo que se entiende por «un artista del XVII» y lo que cabe en una
+etiqueta de formulario. Admite negativos porque el catálogo va de -1809 a 2006.
+Un artista sin año —589 de 11.426— desaparece al pedir un rango, y es lo
+correcto: de quien no se sabe cuándo nació no se puede afirmar que esté dentro.
+
+Comprobado que se combinan y estrechan: 11.426 → 531 holandeses → 383 nacidos en
+el XVII → 115 que además llevan «van».
+
+**Ojo con `create or replace` al añadir parámetros.** Postgres identifica una
+función por sus argumentos, así que la 0036 con tres parámetros más no habría
+reemplazado nada: habría creado una SEGUNDA `list_artists`, y una llamada con
+seis argumentos seguiría cayendo en la vieja —la que no filtra— sin dar error.
+De ahí el `drop function` explícito antes del `create`.
+
+**Movimientos** (`/es/movimientos`): 187 con obra, tabla ordenable por nombre o
+por número. Cada fila lleva al buscador ya filtrado y no a una ficha propia,
+porque una ficha de movimiento sería el buscador filtrado con otro nombre. Eran
+el único eje del catálogo sin página: se podía filtrar por movimiento, pero solo
+eligiendo de un desplegable de cuarenta, así que los otros 147 no existían.
+
+**Sin columna de época, y no por olvido**: `movements` tiene `start_year` y
+`end_year` y están **a null en los 187**. La ingesta nunca los pidió a Wikidata.
+Se quitó la columna en vez de dejarla vacía, que parecería un dato que falta en
+vez de un dato que no se trae. Rellenarlos es trabajo de ingesta (P580 y P582).
+
+**Las etiquetas de la barra son cortas** —«Museos», no «Todos los museos»—:
+con cuatro secciones las largas se salían de un teléfono de 390 px y «Buscar»
+quedaba cortado contra el borde. La mayúscula la pone el estilo, para no
+duplicar siete traducciones por una letra.
+
 **Queda sin resolver**: las nacionalidades vienen de Wikidata en inglés y sin
 traducir —«Kingdom of Pergamon», «Tang dynasty»— y muchas son estados históricos
-que ya no existen. Y el filtro por museo en el buscador, que sigue sin existir.
+que ya no existen. El filtro por museo en el buscador sigue sin existir. Y los
+años de los movimientos, que hay que traer de Wikidata.
 
 **La chincheta, de `<button>` a `<a href>`.** El clic normal se sigue
 interceptando para que la navegación sea instantánea, pero con Ctrl, Cmd,
