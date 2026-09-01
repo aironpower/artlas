@@ -33,6 +33,19 @@ export const SEGMENTS = {
   museum:  { es: 'museo',   en: 'museum',  fr: 'musee' },
   search:  { es: 'buscar',  en: 'search',  fr: 'recherche' },
 
+  /*
+   * Los índices, en plural. Existen porque a las fichas de museo y de artista
+   * no se llegaba: al museo solo pulsando su chincheta en el mapa, y al artista
+   * solo desde la ficha de una obra suya. Una página a la que solo se llega de
+   * rebote no existe para quien no la conoce.
+   *
+   * Ni un segmento choca con su singular —`museos`/`museo`, `artists`/`artist`,
+   * `artistes`/`artiste`—, que es lo que `translatePath` necesita para no
+   * confundirlos al traducir la URL.
+   */
+  museums: { es: 'museos',   en: 'museums', fr: 'musees' },
+  artists: { es: 'artistas', en: 'artists', fr: 'artistes' },
+
   /* `admin` es igual en los tres idiomas, así que no genera reescritura. Y es
    * deliberado que no se traduzca: es una ruta de trabajo, no de producto. */
   admin:   { es: 'admin',   en: 'admin',   fr: 'admin' },
@@ -50,6 +63,8 @@ export const CANONICAL_SEGMENT: Record<Section, string> = {
   artist: SEGMENTS.artist.es,
   museum: SEGMENTS.museum.es,
   search: SEGMENTS.search.es,
+  museums: SEGMENTS.museums.es,
+  artists: SEGMENTS.artists.es,
   admin: SEGMENTS.admin.es,
 };
 

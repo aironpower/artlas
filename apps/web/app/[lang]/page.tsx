@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { isLang, t, formatNumber } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 import { mapPins, searchArtworks, countArtists } from '@/lib/data';
 import WorldMap from '@/components/WorldMap';
 import ArtworkGrid from '@/components/ArtworkGrid';
@@ -25,10 +27,23 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
     <>
       <section style={{ padding: '30px 0 18px' }}>
         <h1 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{t(lang, 'tagline')}</h1>
+        {/*
+          * Las tres cifras son enlaces desde el 1 de septiembre. Eran texto
+          * plano, y eso dejaba los museos accesibles solo pulsando su chincheta
+          * y los artistas solo desde la ficha de una obra suya. Un número que
+          * dice «21.619 artistas» y no lleva a ninguna parte es una promesa que
+          * la página no cumple.
+          */}
         <p className="muted">
-          {formatNumber(lang, totalWorks)} {t(lang, 'artworks')} ·{' '}
-          {formatNumber(lang, artists)} {t(lang, 'artists')} ·{' '}
-          {formatNumber(lang, pins.length)} {t(lang, 'museums')}
+          <Link href={path(lang, 'search')}>
+            {formatNumber(lang, totalWorks)} {t(lang, 'artworks')}
+          </Link>{' · '}
+          <Link href={path(lang, 'artists')}>
+            {formatNumber(lang, artists)} {t(lang, 'artists')}
+          </Link>{' · '}
+          <Link href={path(lang, 'museums')}>
+            {formatNumber(lang, pins.length)} {t(lang, 'museums')}
+          </Link>
         </p>
       </section>
 

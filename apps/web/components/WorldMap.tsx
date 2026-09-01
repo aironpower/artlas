@@ -89,9 +89,20 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
     const ordered = [...pins].sort((a, b) => a.artwork_count - b.artwork_count);
 
     const markers = ordered.map((pin) => {
-      const el = document.createElement('button');
+      /*
+       * Un enlace de verdad, no un botón con manejador.
+       *
+       * Era un `<button>` que llamaba al router, y eso significaba que la
+       * chincheta no se podía abrir en una pestaña nueva, no se podía copiar su
+       * dirección y no la seguía ningún buscador: las 48 fichas de museo no
+       * existían para nadie que no pulsara encima. Siendo `<a>` con `href`,
+       * el navegador hace lo suyo y el clic normal lo seguimos interceptando
+       * para que la navegación siga siendo instantánea.
+       */
+      const destino = path(lang, 'museum', pin.slug);
+      const el = document.createElement('a');
       el.className = 'pin';
-      el.type = 'button';
+      el.href = destino;
 
       // El tamaño crece con la colección, pero por raíz cuadrada: si fuera
       // lineal, el Louvre taparía media Francia.
@@ -135,7 +146,13 @@ export default function WorldMap({ pins, lang, center = [6, 46], zoom = 3.4 }: P
           `${formatNumber(lang, pin.artwork_count)} ${t(lang, 'artworks')}</span>`,
         );
 
-      el.addEventListener('click', () => navigate.current(path(lang, 'museum', pin.slug)));
+      el.addEventListener('click', (ev) => {
+        // Con Ctrl, Cmd, Mayúsculas o botón central, apartarse: quien pide una
+        // pestaña nueva quiere una pestaña nueva, no que le roben el clic.
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button !== 0) return;
+        ev.preventDefault();
+        navigate.current(destino);
+      });
 
       return new maplibregl.Marker({ element: el })
         .setLngLat([pin.lng, pin.lat])

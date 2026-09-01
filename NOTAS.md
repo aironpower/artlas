@@ -472,6 +472,46 @@ documento no se enteró hasta el 1 de septiembre. Estado real:
 
 ---
 
+## Lo hecho en la web el 1 de septiembre: llegar a las páginas
+
+Manuel lo vio mirando la app: **las fichas de museo y de artista existían y no
+había cómo llegar a ellas.** Medido antes de tocar nada:
+
+- **Museo**: solo pulsando su chincheta en el mapa —y era un `<button>` con un
+  manejador, así que no se podía abrir en pestaña nueva, ni copiar su dirección,
+  ni la seguía un buscador— o desde la ficha de una obra suya.
+- **Artista**: solo desde la ficha de una obra suya. Había que dar con un cuadro
+  de Goya para poder ver a Goya.
+- Las tres cifras de la portada —obras, artistas, museos— eran **texto plano**.
+- El buscador filtra por movimiento, país, ciudad, categoría y años, pero **no
+  por museo ni por artista**: el parámetro `artista` se lee y nada en la
+  interfaz lo pone.
+
+Ahora hay `/es/museos` y `/es/artistas` (con sus segmentos en los tres idiomas),
+las tres cifras llevan a ellas y las chinchetas son enlaces de verdad.
+
+**Los museos van sin paginar ni buscar: son 48 y caben de un vistazo.** Ordenados
+por número de obras, que es por donde empieza a mirar cualquiera; por nombre
+saldría primero un museo de 23 obras. Reutiliza `mapPins`, la misma consulta que
+pinta la portada, así que comparten la caché de una hora.
+
+**Los artistas son doscientos de 21.619, y es una decisión, no un tope.** La cola
+son artistas con una sola obra, cuyo nombre solo sirve si ya lo ibas buscando —y
+para eso está el buscador, enlazado desde la propia página—. Paginar 217 páginas
+de nombres que nadie recorre es fingir que se ofrece algo. **Una lista es una
+puerta de entrada, no un inventario.**
+
+**La chincheta, de `<button>` a `<a href>`.** El clic normal se sigue
+interceptando para que la navegación sea instantánea, pero con Ctrl, Cmd,
+Mayúsculas o botón central se aparta: quien pide una pestaña nueva quiere una
+pestaña nueva. Comprobado con Playwright sobre la app construida: 48 chinchetas,
+todas `<a>` con dirección, y el clic navega sin recargar.
+
+**Queda pendiente** el filtro por museo en el buscador, que hoy no existe: se
+puede filtrar por ciudad pero no por un museo concreto.
+
+---
+
 ## Lo hecho en la web el 29 de agosto (tarde): el color y el mapa
 
 No estaba escrito en ningún sitio y son siete commits. La idea, que está en la

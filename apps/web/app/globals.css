@@ -259,6 +259,9 @@ option::checkmark { display: none; }
  * mapa reducido a costas y agua, la única forma recta de la pantalla destaca
  * sin necesitar cerco ni sombra.
  */
+/* Es un `<a>` y no un botón, para que se pueda abrir en pestaña nueva y la siga
+   un buscador. De ahí `text-decoration: none` y el color forzado: hereda los
+   del enlace y aquí el fondo ya es el acento. */
 .pin {
   display: grid; place-items: center;
   padding: 0;
@@ -266,7 +269,10 @@ option::checkmark { display: none; }
   border: 0; border-radius: 0;
   font-size: 0.72rem; font-weight: 700; line-height: 1; cursor: pointer;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+  text-decoration: none;
 }
+
+.pin:hover, .pin:focus-visible { color: #fff; }
 
 /* Mapa por artista: un círculo por punto, en su posición exacta. Cuando varias
    obras comparten museo comparten píxel, y el número dentro dice cuántas son. */
@@ -580,6 +586,25 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
   gap: 16px; padding-top: 26px;
 }
 .section-head h2 { margin: 0; }
+
+/* --- Los índices de museos y artistas ---------------------------------------
+ *
+ * Una lista de nombres, a dos columnas en pantalla ancha. Doscientos artistas
+ * en una sola columna son dos metros de scroll para algo que se recorre con la
+ * vista, no leyendo: dos columnas lo parten y siguen entrando de un vistazo.
+ *
+ * `break-inside: avoid` porque sin él una fila se parte por la mitad entre el
+ * final de una columna y el principio de la otra, y el nombre queda arriba y su
+ * número de obras abajo del todo a la izquierda.
+ */
+.listado { list-style: none; margin: 20px 0 40px; padding: 0; columns: 2; column-gap: 40px; }
+.listado li {
+  break-inside: avoid;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 560px) { .listado { columns: 1; } }
 
 /* --- La rejilla en el móvil ------------------------------------------------
  *

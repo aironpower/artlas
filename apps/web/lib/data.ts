@@ -505,6 +505,36 @@ export async function listMovements(lang: Lang) {
 }
 
 /**
+ * Los artistas con más obra en el catálogo.
+ *
+ * Doscientos y no los 21.619 que hay. No es una limitación técnica: paginar
+ * 21.619 nombres son 217 páginas que nadie recorre, y la cola son artistas con
+ * una sola obra cuyo nombre solo sirve si ya lo buscabas —y para eso está el
+ * buscador—. Una lista es una puerta de entrada, no un inventario.
+ *
+ * El nombre sale de `coalesce(traducción, canónico)` como en todas partes: el
+ * catálogo dice «Hieronymus Bosch» y en español hay que leer «El Bosco».
+ */
+export async function listArtists(lang: Lang, limit = 200) {
+  const { data, error } = await db()
+    .from('artists')
+    .select('slug, name, birth_year, death_year, artwork_count, artist_translations ( lang, name )')
+    .gt('artwork_count', 0)
+    .order('artwork_count', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`artistas: ${error.message}`);
+
+  return (data ?? []).map((a: any) => ({
+    slug: a.slug as string,
+    name: (pick(a.artist_translations, lang)?.name ?? a.name) as string,
+    birthYear: a.birth_year as number | null,
+    deathYear: a.death_year as number | null,
+    count: a.artwork_count as number,
+  }));
+}
+
+/**
  * Ciudades con obras de un país, para el subfiltro.
  *
  * Devuelve el nombre canónico como valor y el traducido como etiqueta. El
