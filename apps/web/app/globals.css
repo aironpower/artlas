@@ -105,7 +105,13 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 0.4em; font-weight: 650; letter-spaci
 
 .search-form { display: flex; gap: 8px; flex: 1; max-width: 620px; }
 
-input[type='search'], input[type='text'], input[type='number'], select {
+/*
+ * `email` y `password` faltaban en esta lista, y por eso la pantalla de
+ * entrar salía con los recuadros crudos del navegador al lado de botones
+ * cuidados. No era que no tuviera estilo: era que no le llegaba.
+ */
+input[type='search'], input[type='text'], input[type='number'],
+input[type='email'], input[type='password'], select {
   width: 100%; padding: 9px 13px;
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); color: var(--text); font: inherit; font-size: 0.95rem;
@@ -545,7 +551,9 @@ option::checkmark { display: none; }
 
 .login { max-width: 380px; margin: 60px auto; text-align: center; }
 .login h1 { margin-bottom: 4px; }
-.login form { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.login form { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.login input { padding: 11px 14px; text-align: center; }
+.login .btn-primary { margin-top: 4px; padding: 11px 14px; }
 
 /* --- Entrar con Google o GitHub -------------------------------------------
  *
@@ -598,6 +606,25 @@ option::checkmark { display: none; }
   padding-top: 18px;
   border-top: 1px solid var(--border);
 }
+
+/* --- La pantalla de cuenta se queda sola --------------------------------
+ *
+ * Entrar es una tarea con un solo final, y el resto de la página son salidas:
+ * el buscador, las secciones, y sobre todo un enlace «Entrar» en la cabecera
+ * mientras ya estás en la pantalla de entrar. Se apagan.
+ *
+ * Se queda el logotipo, que sigue llevando al mapa. Por eso estas pantallas
+ * ya no llevan su propio «Volver al mapa»: se sale por donde se sale en el
+ * resto de la web, arriba a la izquierda.
+ *
+ * Va con `:has()` y no con un layout aparte porque el layout de `[lang]` es
+ * quien pinta la cabecera, y un layout hijo se anida DENTRO: puede añadir, no
+ * puede quitar. La alternativa era un middleware que anunciara la ruta en una
+ * cabecera solo para esto.
+ */
+body:has(.login) .topbar > *:not(.brand),
+body:has(.login) .secciones,
+body:has(.login) > footer { display: none; }
 
 /* --- Varios --------------------------------------------------------------- */
 
@@ -770,7 +797,8 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
   .topbar { gap: 10px; padding: 10px 14px; }
   .search-form { min-width: 0; }
   .search-form .btn { display: none; }
-  input[type='search'], input[type='text'], input[type='number'], select { font-size: 16px; }
+  input[type='search'], input[type='text'], input[type='number'],
+input[type='email'], input[type='password'], select { font-size: 16px; }
 }
 
 /* Un botón que se lee como un enlace, para «Salir»: es una acción y necesita un

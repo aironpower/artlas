@@ -610,6 +610,24 @@ over_email_send_rate_limit`. El SMTP de serie de Supabase manda 2-3 correos por
 hora: para usuarios de verdad hace falta uno propio (Resend, Postmark). Hasta
 entonces, el segundo registro de la hora ve «no hemos podido enviar el correo».
 
+### Dos arreglos visuales, del repaso de Manuel
+
+**Los recuadros salían crudos.** No era falta de estilo, era que no le llegaba:
+la regla de `globals.css` listaba `search`, `text` y `number`, y **`email` y
+`password` no estaban**. Botones cuidados al lado de recuadros del navegador.
+Añadidos a las dos reglas que llevaban esa lista.
+
+**Y la pantalla estaba rodeada de salidas**: el buscador, las secciones, el pie,
+y un enlace «Entrar» en la cabecera estando ya en la pantalla de entrar. Ahora
+solo queda el logotipo —que sigue llevando al mapa, y por eso estas pantallas ya
+no llevan su propio «Volver al mapa»— y el selector de idioma, que sí hace falta
+antes de entrar.
+
+Se apaga con `body:has(.login)` y no con un layout aparte **porque no se puede**:
+la cabecera la pinta el layout de `[lang]`, y un layout hijo se anida dentro, así
+que puede añadir pero no quitar. La otra vía era un middleware que anunciara la
+ruta en una cabecera, solo para esto.
+
 ### De paso: los cuatro idiomas fantasma de `i18n.ts`
 
 El fichero guarda textos de `it`, `de`, `pt` y `nl` con un comentario que dice

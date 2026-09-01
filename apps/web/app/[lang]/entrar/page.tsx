@@ -84,9 +84,6 @@ export default async function Entrar({ params, searchParams }: Props) {
         </Link>
       </p>
 
-      <p className="small" style={{ paddingTop: 10 }}>
-        <Link className="muted" href={`/${idioma}`}>{t(idioma, 'backToMap')}</Link>
-      </p>
     </div>
   );
 }
