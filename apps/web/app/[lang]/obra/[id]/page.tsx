@@ -6,6 +6,10 @@ import { imageUrl } from '@/lib/images';
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import ArtworkImage from '@/components/ArtworkImage';
+import { BotonFavorito } from '@/components/BotonFavorito';
+import { currentUser, viewerIsAdmin } from '@/lib/auth';
+import { esFavorita } from '@/lib/favoritos';
+import { alternarFavorito } from '@/lib/favoritos-acciones';
 
 export const revalidate = 3600;
 
@@ -37,6 +41,23 @@ export default async function ArtworkPage({ params }: Props) {
 
   const work = await getArtwork(lang, numericId);
   if (!work) notFound();
+
+  /*
+   * Lo que depende de quién mira: si la obra está entre sus favoritos y si
+   * puede corregirla. Va en `Promise.all` con la ficha ya resuelta porque son
+   * tres consultas independientes y encadenarlas triplicaría la espera.
+   *
+   * Que esto exista NO vuelve dinámica la página: son lecturas dentro del
+   * componente, y lo que Next cachea es el resultado con `revalidate`. Por eso
+   * `alternarFavorito` llama a `revalidatePath`: sin él, el corazón se quedaría
+   * como estaba hasta que caducara la hora.
+   */
+  const ruta = path(lang, 'artwork', work.id);
+  const [haySesion, guardada, admin] = await Promise.all([
+    currentUser().then(Boolean),
+    esFavorita(work.id),
+    viewerIsAdmin(),
+  ]);
 
   /*
    * Por dónde seguir. Antes solo había "más obras del mismo autor", y eso
@@ -84,6 +105,29 @@ export default async function ArtworkPage({ params }: Props) {
 
         <div>
           <h1>{work.title}</h1>
+
+          {/*
+            * Guardar la obra y, si quien mira administra, corregirla sin dar
+            * la vuelta por el panel: se ve el fallo en la ficha pública y se
+            * arregla desde ahí, que es donde uno lo nota.
+            */}
+          <div className="acciones-ficha">
+            <BotonFavorito
+              lang={lang}
+              guardada={guardada}
+              haySesion={haySesion}
+              ruta={ruta}
+              accion={async () => {
+                'use server';
+                await alternarFavorito(work.id, ruta);
+              }}
+            />
+            {admin && (
+              <Link className="btn" href={`${path(lang, 'admin')}/corregir/obra/${work.id}`}>
+                {t(lang, 'editThis')}
+              </Link>
+            )}
+          </div>
 
           {work.artist && (
             <p style={{ fontSize: '1.05rem', margin: '0 0 4px' }}>

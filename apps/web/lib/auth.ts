@@ -27,6 +27,23 @@ export async function supabaseServer() {
   }
 
   return createServerClient(url, key, {
+    /*
+     * Nada de lo que pase por aquí se cachea, y es de corrección y no de gusto.
+     *
+     * Next memoiza los `fetch` idénticos dentro de una misma petición. Una
+     * acción de servidor y el render que la sigue son LA MISMA petición, así
+     * que al guardar un favorito ocurría esto: la acción preguntaba «¿está
+     * guardada?» (no), escribía la fila, y el render volvía a preguntar lo
+     * mismo —misma URL, mismos parámetros— y recibía la respuesta memoizada de
+     * antes de escribir. La base quedaba bien y el botón seguía diciendo
+     * «Guardar». Costó encontrarlo porque una recarga limpia lo enseñaba bien.
+     *
+     * Además, todo lo que se lee con este cliente depende de QUIÉN mira. Una
+     * respuesta cacheada aquí es una respuesta de una persona servida a otra.
+     */
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+    },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {
@@ -56,6 +73,27 @@ export async function currentUser(): Promise<AdminSession | null> {
   const { data } = await db.auth.getUser();
 
   return data.user ? { userId: data.user.id, email: data.user.email ?? null } : null;
+}
+
+/**
+ * ¿Es administrador quien mira, sin hacer desaparecer nada?
+ *
+ * `requireAdmin` sirve para cerrar una página; esto sirve para decidir si una
+ * página pública enseña un enlace de más. Devuelve `false` para un visitante
+ * anónimo en vez de tirar la petición, que es lo que hace falta cuando la
+ * respuesta correcta es «la página, pero sin el enlace».
+ *
+ * Ojo: esto es apariencia, no permiso. Quien fuerce la URL del formulario de
+ * corrección se topa con `requireAdmin`, y quien llame a la base directamente,
+ * con las políticas. Aquí solo se decide qué se pinta.
+ */
+export async function viewerIsAdmin(): Promise<boolean> {
+  const db = await supabaseServer();
+  const { data: sesion } = await db.auth.getUser();
+  if (!sesion.user) return false;
+
+  const { data, error } = await db.rpc('is_admin');
+  return !error && data === true;
 }
 
 /**

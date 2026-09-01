@@ -47,6 +47,10 @@ export const SEGMENTS = {
   artists:   { es: 'artistas',    en: 'artists',   fr: 'artistes' },
   movements: { es: 'movimientos', en: 'movements', fr: 'mouvements' },
 
+  /* Las de cuenta. `entrar/clave` y `favoritos` cuelgan de estas. */
+  login:     { es: 'entrar',      en: 'signin',    fr: 'connexion' },
+  favorites: { es: 'favoritos',   en: 'favorites', fr: 'favoris' },
+
   /* `admin` es igual en los tres idiomas, así que no genera reescritura. Y es
    * deliberado que no se traduzca: es una ruta de trabajo, no de producto. */
   admin:   { es: 'admin',   en: 'admin',   fr: 'admin' },
@@ -67,6 +71,8 @@ export const CANONICAL_SEGMENT: Record<Section, string> = {
   museums: SEGMENTS.museums.es,
   artists: SEGMENTS.artists.es,
   movements: SEGMENTS.movements.es,
+  login: SEGMENTS.login.es,
+  favorites: SEGMENTS.favorites.es,
   admin: SEGMENTS.admin.es,
 };
 

@@ -95,6 +95,27 @@ export default async function FindingsPage({ params }: Props) {
                   <p className="muted small" style={{ margin: '4px 0 0' }}>{h.detail}</p>
                 </div>
 
+                {/*
+                  * El enlace que faltaba. La bandeja llevaba a la ficha
+                  * PÚBLICA de la obra: se veía el problema y desde ahí no se
+                  * podía hacer nada, había que ir al panel, buscarla otra vez y
+                  * abrir su formulario. Una bandeja de revisión sin el botón de
+                  * arreglar es una lista de quejas.
+                  *
+                  * Solo para las obras y artistas, que son los que tienen
+                  * formulario por id; un hallazgo de movimiento apunta a otra
+                  * tabla y su corrección se hace desde el catálogo.
+                  */}
+                <div className="acciones">
+                  {(h.entity_type === 'artwork' || h.entity_type === 'artist') && (
+                    <Link
+                      className="btn"
+                      href={`${path(idioma, 'admin')}/corregir/${h.entity_type === 'artwork' ? 'obra' : 'artista'}/${h.entity_id}`}
+                    >
+                      Corregir
+                    </Link>
+                  )}
+
                 <form action={revisar} className="acciones">
                   <input type="hidden" name="id" value={h.id} />
                   <button className="btn" name="estado" value="confirmed" type="submit">
@@ -104,6 +125,7 @@ export default async function FindingsPage({ params }: Props) {
                     Falso positivo
                   </button>
                 </form>
+                </div>
               </li>
             );
           })}

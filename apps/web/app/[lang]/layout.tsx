@@ -6,6 +6,7 @@ import { isLang, t, LANGS } from '@/lib/i18n';
 import { path } from '@/lib/routes';
 import SearchBox from '@/components/SearchBox';
 import { LanguagePicker, LanguagePickerSinFiltros } from '@/components/LanguagePicker';
+import { Cuenta } from '@/components/Cuenta';
 import '../globals.css';
 
 /*
@@ -70,6 +71,19 @@ export default async function LangLayout(
           <Link href={path(lang, 'artists')}>{t(lang, 'artists')}</Link>
           <Link href={path(lang, 'movements')}>{t(lang, 'movements')}</Link>
           <Link href={path(lang, 'search')}>{t(lang, 'searchAction')}</Link>
+
+          <span className="grow" />
+
+          {/*
+            * Lo de la cuenta depende de la cookie de sesión, así que es
+            * dinámico. Va dentro de un `Suspense` para que el resto de la
+            * página se siga sirviendo desde la caché mientras se resuelve
+            * quién mira: sin él, una sola cookie volvería dinámico el sitio
+            * entero.
+            */}
+          <Suspense fallback={null}>
+            <Cuenta lang={lang} />
+          </Suspense>
         </nav>
 
         <main className="shell">{children}</main>

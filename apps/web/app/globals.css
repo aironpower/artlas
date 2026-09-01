@@ -719,3 +719,21 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
   .search-form .btn { display: none; }
   input[type='search'], input[type='text'], input[type='number'], select { font-size: 16px; }
 }
+
+/* Un botón que se lee como un enlace, para «Salir»: es una acción y necesita un
+   formulario, pero al lado de tres enlaces tiene que parecerse a ellos. */
+.enlace {
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--muted); cursor: pointer;
+  text-transform: capitalize;
+}
+.enlace:hover { color: var(--accent); }
+
+/* El botón de guardar en favoritos. Marcado, se pinta con el acento: es
+   posición —«esta obra está en tu lista»—, que es para lo que sirve. */
+.btn.favorito { display: inline-flex; align-items: center; gap: 6px; }
+.btn.favorito.guardada { color: var(--accent); border-color: var(--accent); }
+
+/* La fila de acciones bajo el título de una obra: guardar y, para quien
+   administra, corregir. */
+.acciones-ficha { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }

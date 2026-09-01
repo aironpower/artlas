@@ -616,6 +616,76 @@ puede filtrar por ciudad pero no por un museo concreto.
 
 ---
 
+## Cuentas, favoritos y corregir desde la web (1 de septiembre)
+
+**La tabla `favorites` ya existía desde `0001_init`**, con la forma correcta y
+cero filas: llevaba desde el principio esperando una pantalla. Conviene mirar
+las migraciones antes de escribir una — la 0037 se escribió entera creándola y
+falló con «relation already exists». Lo que sí faltaba y añade: dos índices y
+`my_favorites`, que trae la lista con los textos ya en el idioma de quien mira.
+
+**La entrada se mudó de `/admin/entrar` a `/entrar`**, porque ya no es del
+panel: desde que hay favoritos se identifica cualquiera. La ruta vieja queda
+como redirección —está en enlaces y en `ver-panel.mjs`, y una URL que alguien
+pudo guardar no se borra, se reenvía—.
+
+**Contraseña además del enlace al correo, no en su lugar.** El enlace es lo
+bueno para quien entra dos veces al año: nada que recordar, y registrarse es lo
+mismo que entrar. La contraseña es para quien entra a diario, porque esperar un
+correo para corregir un título es fricción pura. Nadie tiene contraseña hasta
+que se la pone en `/entrar/clave`, ya dentro: así no hay que inventarle una a
+nadie ni mandarla por ningún canal.
+
+**El admin corrige desde donde ve el fallo.** Enlace «Corregir» en la ficha
+pública de una obra cuando quien mira administra, y —lo que faltaba de verdad—
+en la bandeja de hallazgos: llevaba a la ficha PÚBLICA, o sea que veías el
+problema y tenías que ir al panel, buscar la obra otra vez y abrir su
+formulario. Una bandeja de revisión sin el botón de arreglar es una lista de
+quejas.
+
+`viewerIsAdmin()` decide qué se PINTA y no qué se puede hacer: quien fuerce la
+URL del formulario se topa con `requireAdmin`, y quien llame a la base
+directamente, con las políticas.
+
+### El botón de favorito: tres intentos hasta dar con la forma
+
+Empezó siendo un formulario de servidor puro, que es lo coherente con el resto
+de la app. **No funcionaba: la base guardaba bien y el botón seguía diciendo
+«Guardar».** Una pantalla que miente sobre lo que acaba de guardar es peor que
+una que no guarda.
+
+Lo que se probó y NO lo arregló, por orden:
+
+1. `revalidatePath` de la ruta. La respuesta de una acción de servidor se pinta
+   reutilizando la carga que el cliente ya tenía de esa página.
+2. Separar lectura de escritura. Aquí sí había un fallo real y se queda
+   arreglado: `esFavorita` vivía en un fichero con `'use server'` en la primera
+   línea, y eso convierte en acción de servidor **todo** lo que exporta,
+   incluida una función que solo lee. La regla que queda: `'use server'` marca
+   lo que MUTA; lo que se lee al renderizar es un módulo normal.
+3. Desactivar la caché de `fetch` en el cliente de Supabase. También se queda,
+   y también por su propio motivo: Next memoiza los `fetch` idénticos dentro de
+   una petición, y una acción y el render que la sigue son la misma petición.
+   Además, **todo lo que lee ese cliente depende de quién mira**: una respuesta
+   cacheada ahí es la de una persona servida a otra.
+4. `redirect` a la misma ruta. Unas veces bien y otras devolvía una página a
+   medias, sin un solo error en el servidor.
+
+Lo que sí: **componente de cliente con `useOptimistic`**. Un interruptor por
+usuario no encaja en el molde de «todo servidor»; el estado lo lleva la pantalla
+al instante y el servidor confirma después, y si la escritura falla React
+revierte solo. Sigue siendo un `<form>` con una acción de verdad, así que sin
+JavaScript el botón funciona igual: se pierde la respuesta instantánea, no la
+función.
+
+**Y una lección de método, que costó más que el fallo.** Media hora se fue
+persiguiendo un fallo que no existía: la prueba esperaba a `networkidle` después
+de pulsar, y con una acción de servidor la página nunca deja de estar «idle»,
+así que leía el DOM de antes. **Antes de dar por roto el código, comprobar que
+la prueba mide lo que cree medir.**
+
+---
+
 ## Lo hecho en la web el 29 de agosto (tarde): el color y el mapa
 
 No estaba escrito en ningún sitio y son siete commits. La idea, que está en la
