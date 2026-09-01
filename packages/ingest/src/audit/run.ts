@@ -67,8 +67,26 @@ async function readAll<T>(
     const to = Math.min(from + PAGE - 1, (limit ?? Infinity) - 1);
     if (to < from) break;
 
-    const { data, error } = await db.from(table).select(columns).order('id').range(from, to);
-    if (error) throw new Error(`${table}: ${error.message}`);
+    /*
+     * Con reintento, porque una página puede caerse por `statement timeout` sin
+     * que haya nada roto: son 270 peticiones seguidas sobre 269.000 filas y
+     * basta que la base esté ocupada —un autovacuum, el UPDATE con el que la
+     * pasada anterior marcó 10.000 imágenes— para que una pase de los 3 s del
+     * rol. Pasó el 1 de septiembre de 2026 y tiró una pasada entera de
+     * imágenes que no tenía nada que ver con la lectura.
+     */
+    let data: unknown[] | null = null;
+
+    for (const espera of [0, 2000, 8000, 20000]) {
+      if (espera) await new Promise((r) => setTimeout(r, espera));
+
+      const intento = await db.from(table).select(columns).order('id').range(from, to);
+      if (!intento.error) { data = intento.data; break; }
+
+      if (espera === 20000) throw new Error(`${table}: ${intento.error.message}`);
+      console.log(`  (reintentando ${table} ${from}-${to}: ${intento.error.message})`);
+    }
+
     if (!data?.length) break;
 
     rows.push(...(data as T[]));

@@ -1,13 +1,14 @@
 # Notas de trabajo
 
-Estado al 31 de agosto de 2026 y lo siguiente a hacer.
+Estado al 1 de septiembre de 2026 y lo siguiente a hacer.
 
 ---
 
 ## AL EMPEZAR: lo que queda por hacer
 
-Nada está corriendo. El catálogo está sano: 147.869 obras, 47 de 48 museos
-completos, 214 MB de los 500 del plan gratuito.
+Nada está corriendo. El catálogo está sano: **269.159 obras** (135.261
+publicadas), **48 de 48 museos completos**, **374 MB** de los 500 del plan
+gratuito.
 
 **Lo que Manuel quiere que se haga, por orden:**
 
@@ -34,10 +35,11 @@ completos, 214 MB de los 500 del plan gratuito.
 
 5. **Rotar la contraseña de la base**, que pasó por una conversación.
 
-6. **El repaso visual de la web**, que sigue pendiente desde el 28: la ficha de
-   obra no ofrece a dónde seguir, la tarjeta mide 580 px en el móvil, los
-   títulos arrastran ruido de Wikidata («El columpio (Goya)») y faltan las
-   transiciones entre vistas. Sección **Lo hecho en la web**.
+6. **El repaso visual de la web**, casi terminado. Hechos el color, el mapa de
+   papel, la ficha con salida, las dos columnas del móvil y los esqueletos de
+   carga. Quedan dos cosas: **limpiar el ruido de los títulos de Wikidata**
+   («El columpio (Goya)») y las **View Transitions** con precarga al pasar el
+   ratón. Secciones **Lo hecho en la web el 28** y **el 29 (tarde)**.
 
 Y una advertencia que ahorra una noche: **no usar `reanudar-ingesta.cmd`**, que
 no es de fiar. El comando que sí funciona está en la sección siguiente.
@@ -46,7 +48,7 @@ no es de fiar. El comando que sí funciona está en la sección siguiente.
 
 ## Dónde nos quedamos
 
-El catálogo pasó de **6.161 obras a 147.869**. Lo que cambió no fue solo el
+El catálogo pasó de **6.161 obras a 269.159**. Lo que cambió no fue solo el
 tamaño: cambió la idea. Antes se descartaba lo que no se podía enseñar; ahora se
 guarda todo y una columna dice qué es visible.
 
@@ -72,7 +74,7 @@ salen a ~0,89 KB, así que quedan unas 140.000 de margen. Conviene mirarlo
 (`npm run check-db`) antes de meter un museo grande, y **desconfiar de lo que
 crece sin ser el catálogo**.
 
-Migraciones `0001`–`0025`, **todas aplicadas** (comprobado el 29 de agosto con
+Migraciones `0001`–`0033`, **todas aplicadas** (comprobado el 31 de agosto con
 `npm run migrate -- --status`). Ya no se aplican a mano: `npm run migrate`.
 
 Hay además un **panel de revisión** en `/[lang]/admin`, con acceso por enlace
@@ -80,10 +82,10 @@ al correo. `manuel@softie.dev` ya es administrador.
 
 ### Estado del barrido (29 de agosto de 2026, 04:00)
 
-**47 de los 48 museos están completos.** El barrido de esa madrugada duró
+**47 de los 48 museos quedaron completos esa madrugada.** El barrido duró
 2 h 37 min y metió el Met entero, que llevaba dos días atascado: 21.291 obras él
-solo. Solo falta la **Galería Nacional de Arte**, y tiene sección propia más
-abajo.
+solo. El que faltaba, la Galería Nacional de Arte, **entró esa misma tarde**:
+son 48 de 48 y tiene sección propia más abajo.
 
 Al retomar, lo primero es mirar si hay algo corriendo y cómo acabó:
 
@@ -116,20 +118,25 @@ Antes, a mano: `npm run migrate -- --status` y comprobar que no hay ingesta viva
 
 Ya hecho, no hay que repetirlo:
 
-- **Las 25 migraciones, aplicadas.**
+- **Las 33 migraciones, aplicadas.**
 - **Movimientos fusionados** (215 → 214) y **198 artistas con nombre-URL,
   borrados**.
 - **Autores recuperados**: 1.545 obras, Guernica entre ellas. Sección propia.
 
-Lo siguiente, que ya se puede hacer porque no hay ingesta corriendo:
+La cadena de las imágenes, ya ejecutada el 1 de septiembre y aquí por si hace
+falta repetirla con otro museo:
 
 ```bash
 cd packages/ingest
 npm run fill-images                # en seco: cuántas encontraría
-npm run fill-images -- --apply     # Nationalmuseum: ~23.000 obras esperando
+npm run fill-images -- --apply     # rellena, tras comprobar que 20 cargan
 npm run promote -- --apply         # publica las que ya cumplen
-npm run audit -- --images          # la última pasada es de cuando había 6.460
+npm run audit -- --images          # verifica 10.000 por pasada, ~5 min
 ```
+
+`fill-images` tarda ~30 min: cuatro pidiéndole los inventarios a Wikidata y el
+resto descargándose las 2.084 páginas del catálogo del museo, que no admite
+búsqueda.
 
 ### Comprobar al retomar
 
@@ -191,7 +198,7 @@ la segunda. `image_mode()` mira primero dónde está alojada la imagen.
 |---|---|
 | `npm run migrate` | Aplica migraciones. `--dry-run` las ejecuta y hace ROLLBACK. |
 | `npm run start -- --all --everything` | Barrido completo (~10 h, reanudable). |
-| `npm run audit -- --images` | Audita el catálogo. Imágenes en pasadas de 800. |
+| `npm run audit -- --images` | Audita el catálogo. Imágenes de 10.000 en 10.000, preguntando a Commons por lotes de 50. |
 | `npm run promote` | Reclasifica lo que ya está dentro. |
 | `npm run fill-images` | Busca imágenes en la API del museo. |
 | `npm run merge-movements` | Fusiona movimientos duplicados. |
@@ -421,51 +428,92 @@ dos pasos, tras un 500 en producción en la primera visita a cada página
 profunda). 36 obras por página; enlaces de verdad, no botones, así que la
 página vive en la URL y se indexa.
 
-Lo que queda de aquel repaso visual, por orden de lo que más chirría:
+De aquellos cinco puntos, **cuatro se hicieron el 29 por la tarde** y este
+documento no se enteró hasta el 1 de septiembre. Estado real:
 
-1. **La ficha de obra muere en un vacío** y no ofrece a dónde seguir: ni más
-   obras del mismo museo, ni del mismo artista. En una ventana de 900 px de
-   alto, Guernica ocupa 588 y el pie flota a media página.
-2. **La tarjeta es enorme en móvil**: 580 px cada una, una sola columna. Las
-   páginas siguen midiendo 21.000 px por eso, no por el número de obras.
-3. ~~La cabecera repite el buscador grande~~ — arreglado lo urgente el 28 de
-   agosto: en el móvil el campo se quedaba en 40 px, una cajita donde no cabía
-   una letra. Se quita el botón «Buscar» (el teclado del móvil ya trae el suyo)
-   y los campos pasan a 16 px para que Safari no haga zoom al tocarlos. Queda
-   pendiente lo estético: que no aparezca a pantalla completa dentro de una
-   obra.
-4. **Los títulos arrastran ruido de Wikidata**: «El columpio (Goya)», con el
-   pintor repetido justo debajo.
-5. **Las transiciones entre vistas**, que era lo que Manuel pedía junto al
-   estilo: View Transitions, esqueletos de carga y precarga al pasar el ratón.
+1. ~~La ficha de obra muere en un vacío~~ — **hecho**. Tiene su bloque «por
+   dónde seguir», con más obras del mismo autor y del mismo museo.
+2. ~~La tarjeta es enorme en móvil~~ — **hecho**. Por debajo de 560 px la
+   rejilla pasa a **dos columnas fijas**, que parten el scroll por la mitad y
+   además se parecen más a cómo se mira arte: varias piezas a la vez. Se fija
+   `repeat(2, …)` en vez de bajar el `minmax`, que habría dado ocho columnas
+   apretadas en un escritorio ancho. En una tarjeta de 165 px la tercera línea
+   —el museo— se oculta: el título y el autor ya identifican la obra.
+3. ~~La cabecera repite el buscador grande~~ — **hecho lo urgente**: en el móvil
+   el campo se quedaba en 40 px, una cajita donde no cabía una letra. Se quita
+   el botón «Buscar» (el teclado del móvil ya trae el suyo) y los campos pasan a
+   16 px para que Safari no haga zoom al tocarlos. Queda lo estético: que no
+   aparezca a pantalla completa dentro de una obra.
+4. **PENDIENTE — los títulos arrastran ruido de Wikidata**: «El columpio
+   (Goya)», con el pintor repetido justo debajo. Es lo único de esta lista que
+   sigue entero sin hacer, y ahora se puede arreglar a mano desde
+   `/es/admin/corregir` obra a obra, pero el paréntesis de desambiguación es
+   sistemático y pide una regla.
+5. **Las transiciones, a medias.** Hechos los **esqueletos de carga** —que la
+   espera se vea como carga y no como un enlace roto— y la **animación de
+   entrada** de 160 ms, con `prefers-reduced-motion` respetado en las dos.
+   Faltan las **View Transitions** entre vistas y la **precarga al pasar el
+   ratón**.
+
+---
+
+## Lo hecho en la web el 29 de agosto (tarde): el color y el mapa
+
+No estaba escrito en ningún sitio y son siete commits. La idea, que está en la
+cabecera de `globals.css` y conviene no perder:
+
+**La pantalla es papel —blanco roto, no blanco de pantalla— y tinta; el color lo
+ponen las obras.** Pero queda UN acento, un burdeos que tira a naranja
+(`#bf5320`), y tiene un trabajo concreto: señalar dónde se pulsa y dónde está
+algo en el mapa. Al no haber ningún otro color compitiendo, funciona como la
+línea roja del suelo de un museo: se sigue sin pensarlo. **La regla para no
+volver a llenar esto de color: el acento marca acción o posición, nunca
+decora.**
+
+**El azul del sistema era el único color que nadie había elegido.** Los
+desplegables, las casillas y el texto seleccionado los pintaba el navegador de
+azul, y chillaba justo al lado del burdeos. Se sustituye por una salvia
+(`--seleccion: #afcca5`), casi opuesta al acento en el círculo, que se lee como
+«esto está elegido» sin robarle el papel.
+
+Y una lección de contraste que costó tres intentos: **la salvia clara lleva
+texto OSCURO**, y por eso puede ser tan clara. Con blanco encima se queda en
+1,6:1 —invisible—; con negro sube a 10,4:1. Por eso el color de ese texto tiene
+su **propio token** (`--seleccion-texto`) en vez de usar `--text`: en modo
+oscuro `--text` es claro y sobre ese verde desaparecería. El verde es el mismo
+en los dos modos porque es una marca de rotulador, y un rotulador no cambia de
+color al apagar la luz.
+
+**El mapa, que sea papel y no un callejero.** Se le quitó el mapa base de
+calles: lo que importa es dónde hay museos, no cómo llegar en coche. Las marcas
+son **cuadradas y de un solo tamaño** —una chincheta que crece con el número de
+obras convierte el mapa en un gráfico de burbujas y se lee mal—. Sin sombras y
+sin esquinas redondas: una esquina redonda insinúa un botón de sistema
+operativo, una recta no dice nada, que es lo que se busca (`--radius: 0px`).
 
 ---
 
 ## Lo siguiente, en orden
 
-**0. La aplicación de ingesta.** Ver la ingesta ya está hecho (29 de agosto,
-mañana). Queda editar el catálogo a mano y lanzar desde la pantalla. Tiene
-sección propia más abajo. Sigue delante de todo lo demás porque cambia *cómo*
-se hace el resto, no solo *qué*.
+*Puesto al día el 1 de septiembre de 2026. Los puntos 0, 0 bis, 1 y 2 de esta
+lista estaban hechos y seguían escritos como pendientes: al retomar, fiarse de
+las secciones «HECHO», que llevan fecha.*
 
-**0 bis. La Galería Nacional de Arte**, el único museo que falta. Ya está
-medido; solo hay que volver a medir con WDQS sano y partir la consulta.
+**~~0. La aplicación de ingesta.~~** Hecha entera: ver la ingesta, pedirla y
+pararla desde la web, y corregir el catálogo a mano —obras, artistas, museos,
+movimientos y los textos de cada idioma—.
 
-**1. Imágenes desde las APIs de los museos.** De las ~71.000 que esperan,
-**todas esperan por lo mismo** (`image_missing`) y unas 22.500 están en dominio
-público. No es arte del siglo XX inaccesible: son obras libres sin foto en
-Commons, que sus museos sí publican.
+**~~0 bis. La Galería Nacional de Arte.~~** Entró entera el 29 de agosto:
+48 de 48 museos, ninguno a medias.
 
-El conector del Nationalmuseum (23.214 esperando, un tercio del total) está
-escrito y sin ejecutar: `npm run fill-images`. Cruza por número de inventario,
-no por título — sus títulos están en sueco y los nuestros en inglés.
+**~~1. Imágenes desde la API del museo.~~** Hecho para el Nationalmuseum el 1 de
+septiembre: 9.894 imágenes rellenadas y publicadas. **Sigue siendo el único
+conector de imágenes que existe**; los demás museos están en la lista de «algún
+día» del final, y Manuel decidió el 28 de agosto que no bloqueen el trabajo en
+la aplicación.
 
-**Es el único conector de imágenes que existe.** Los demás museos están en la
-lista de «algún día» del final: cada uno es un conector nuevo, y Manuel decidió
-el 28 de agosto que no bloqueen el trabajo en la aplicación.
-
-**2. Las ~60.000 imágenes sin verificar**, en pasadas incrementales de 800
-(`npm run audit -- --images`).
+**~~2. Las imágenes sin verificar.~~** Hecho: la verificación pasó de tres días
+y medio a minutos preguntándole a Commons de 50 en 50.
 
 **3. Ingesta incremental.** Reingerir un museo vuelve a hidratar TODAS sus obras
 desde Wikidata aunque ya las tengamos idénticas. Saltarse los QID ya conocidos
