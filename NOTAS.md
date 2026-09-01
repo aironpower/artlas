@@ -487,19 +487,79 @@ había cómo llegar a ellas.** Medido antes de tocar nada:
   por museo ni por artista**: el parámetro `artista` se lee y nada en la
   interfaz lo pone.
 
-Ahora hay `/es/museos` y `/es/artistas` (con sus segmentos en los tres idiomas),
-las tres cifras llevan a ellas y las chinchetas son enlaces de verdad.
+**El primer intento no valía, y Manuel lo dijo claro: «esas páginas no sirven de
+nada… no es práctico».** Eran dos listas planas de nombres. Una lista no es una
+herramienta: no se puede ordenar, no dice de dónde es cada museo, y en el caso
+de los artistas ni siquiera se podía buscar. Lo que hay ahora son **tablas
+ordenables**, y la de artistas con **buscador propio**.
 
-**Los museos van sin paginar ni buscar: son 48 y caben de un vistazo.** Ordenados
-por número de obras, que es por donde empieza a mirar cualquiera; por nombre
-saldría primero un museo de 23 obras. Reutiliza `mapPins`, la misma consulta que
-pinta la portada, así que comparten la caché de una hora.
+**Museos** (`/es/museos`): museo, ciudad, país y número de obras, las cuatro
+columnas ordenables. Se ordena en memoria porque son 48 y ya están todos
+pedidos: bajar a la base a reordenar 48 filas que tienes en la mano es pagar una
+ida y vuelta por nada. Reutiliza `mapPins`, la misma consulta que pinta el mapa
+de la portada, así que comparten la caché de una hora.
 
-**Los artistas son doscientos de 21.619, y es una decisión, no un tope.** La cola
-son artistas con una sola obra, cuyo nombre solo sirve si ya lo ibas buscando —y
-para eso está el buscador, enlazado desde la propia página—. Paginar 217 páginas
-de nombres que nadie recorre es fingir que se ofrece algo. **Una lista es una
-puerta de entrada, no un inventario.**
+**Artistas** (`/es/artistas`): artista, nacionalidad, años y obras, ordenables
+por las cuatro, con buscador y páginas de 60. Son **11.426 con obra** —no los
+21.619 de la tabla, que incluye a quien no tiene ninguna—.
+
+**El orden y la búsqueda viven en la URL**, no en JavaScript:
+`?q=goya&orden=anios&dir=asc` se puede compartir, el botón de atrás deshace y
+funciona sin hidratar. Es la misma decisión que ya tomaban el buscador y la
+paginación.
+
+### Por qué hizo falta una migración para los artistas
+
+**El buscador de la web busca obras, no artistas.** Escribir «Goya» devolvía
+cuadros, no al pintor; y la única función que encontraba artistas
+—`admin_search_artists`, de 0031— está revocada a `anon` porque sirve para
+corregir el catálogo. De ahí `list_artists` (0034, ampliada en 0035).
+
+No se hace desde PostgREST por tres cosas: **el nombre que se enseña es
+`coalesce(traducción, canónico)`**, así que buscar «El Bosco» tiene que
+encontrar al que la tabla llama «Hieronymus Bosch» —comprobado en los dos
+sentidos—; hay que **ordenar y paginar a la vez** sin traerse 11.426 filas; y el
+**total viaja como columna** con `count(*) over ()`, porque una segunda consulta
+solo para saber cuántas páginas hay es pagar dos veces el mismo filtro.
+
+`p_sort` y `p_dir` **no se interpolan**: son una lista blanca resuelta con `case`
+en el `order by`. Recibir el nombre de una columna desde una URL y meterlo en un
+`execute format` es cómo se regala una inyección. Comprobado con
+`p_sort = '; drop table artists'`: cae en el desempate por `id` y devuelve algo
+estable.
+
+Medido antes de escribirla: ordenar por nombre 314 ms, buscar «goya» 59 ms,
+contar el filtrado 48 ms. El índice trigram sobre `immutable_unaccent(name)` de
+0001 ya cubría la búsqueda, así que no hizo falta ninguno nuevo.
+
+**La 0035 existe porque la 0034 se quedó corta** —dejaba ordenar por dos
+columnas de cuatro— y no se reescribió la 0034 a propósito: ya estaba aplicada
+en la base de verdad y `migrate` guarda su checksum. Cambiarle el fichero la
+dejaría marcada como distinta para siempre en `--status`, que es el aviso que un
+día servirá para detectar una migración manipulada.
+
+### Dos cosas que solo se vieron mirando la pantalla
+
+**Los años antes de Cristo salían «-1809–-1749»**, porque el guion de separación
+y el signo son el mismo carácter. Hay artistas del segundo milenio a.C. en el
+catálogo —Hammurabi—, así que no es un caso de laboratorio. De ahí
+`formatYears()`, que además no usa `Intl.NumberFormat` para el año: pondría el
+separador de millares y «1.828» no es un año, es una cantidad.
+
+**En el móvil se salía de la pantalla la columna de obras**, justo el dato por el
+que la tabla viene ordenada. La tabla se desliza, pero un dato que hay que
+buscar deslizando es un dato que no está. Se esconde por debajo de 560 px la
+columna que menos añade: el país en museos —la ciudad ya lo dice casi siempre— y
+la nacionalidad en artistas. Comprobado con capturas a 390 px.
+
+**Los enlaces van en una fila propia bajo la cabecera**, no en la barra de
+arriba: allí ya se reparten el sitio el logo, el buscador y tres idiomas, y en
+un teléfono de 390 px al buscador le quedaban 40 px. Dos enlaces más lo dejarían
+otra vez sin espacio.
+
+**Queda sin resolver**: las nacionalidades vienen de Wikidata en inglés y sin
+traducir —«Kingdom of Pergamon», «Tang dynasty»— y muchas son estados históricos
+que ya no existen. Y el filtro por museo en el buscador, que sigue sin existir.
 
 **La chincheta, de `<button>` a `<a href>`.** El clic normal se sigue
 interceptando para que la navegación sea instantánea, pero con Ctrl, Cmd,

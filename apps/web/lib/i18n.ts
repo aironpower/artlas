@@ -42,6 +42,16 @@ const UI = {
     allMuseums: 'Todos los museos',
     topArtists: 'Artistas con más obra',
     restInSearch: 'Para el resto, usa el buscador',
+    allArtists: 'Artistas',
+    sortHint: 'Pulsa una columna para ordenar',
+    colMuseum: 'Museo',
+    colArtist: 'Artista',
+    colNationality: 'Nacionalidad',
+    colYears: 'Años',
+    colWorks: 'Obras',
+    searchArtists: 'Buscar un artista…',
+    noArtists: 'Ningún artista con ese nombre.',
+    bc: 'a.C.',
     filters: 'Filtros',
     movement: 'Movimiento',
     category: 'Categoría',
@@ -95,6 +105,16 @@ const UI = {
     allMuseums: 'All museums',
     topArtists: 'Artists with the most works',
     restInSearch: 'For the rest, use the search',
+    allArtists: 'Artists',
+    sortHint: 'Click a column to sort',
+    colMuseum: 'Museum',
+    colArtist: 'Artist',
+    colNationality: 'Nationality',
+    colYears: 'Years',
+    colWorks: 'Works',
+    searchArtists: 'Search for an artist…',
+    noArtists: 'No artist by that name.',
+    bc: 'BC',
     filters: 'Filters',
     movement: 'Movement',
     category: 'Category',
@@ -148,6 +168,16 @@ const UI = {
     allMuseums: 'Tous les musées',
     topArtists: 'Artistes les plus représentés',
     restInSearch: 'Pour les autres, utilisez la recherche',
+    allArtists: 'Artistes',
+    sortHint: 'Cliquez sur une colonne pour trier',
+    colMuseum: 'Musée',
+    colArtist: 'Artiste',
+    colNationality: 'Nationalité',
+    colYears: 'Années',
+    colWorks: 'Œuvres',
+    searchArtists: 'Chercher un artiste…',
+    noArtists: 'Aucun artiste de ce nom.',
+    bc: 'av. J.-C.',
     filters: 'Filtres',
     movement: 'Mouvement',
     category: 'Catégorie',
@@ -201,6 +231,16 @@ const UI = {
     allMuseums: 'Tutti i musei',
     topArtists: 'Artisti con più opere',
     restInSearch: 'Per gli altri, usa la ricerca',
+    allArtists: 'Artisti',
+    sortHint: 'Clicca su una colonna per ordinare',
+    colMuseum: 'Museo',
+    colArtist: 'Artista',
+    colNationality: 'Nazionalità',
+    colYears: 'Anni',
+    colWorks: 'Opere',
+    searchArtists: 'Cerca un artista…',
+    noArtists: 'Nessun artista con questo nome.',
+    bc: 'a.C.',
     filters: 'Filtri',
     movement: 'Movimento',
     category: 'Categoria',
@@ -247,6 +287,16 @@ const UI = {
     allMuseums: 'Alle Museen',
     topArtists: 'Künstler mit den meisten Werken',
     restInSearch: 'Für die übrigen die Suche benutzen',
+    allArtists: 'Künstler',
+    sortHint: 'Zum Sortieren auf eine Spalte klicken',
+    colMuseum: 'Museum',
+    colArtist: 'Künstler',
+    colNationality: 'Nationalität',
+    colYears: 'Jahre',
+    colWorks: 'Werke',
+    searchArtists: 'Künstler suchen…',
+    noArtists: 'Kein Künstler dieses Namens.',
+    bc: 'v. Chr.',
     filters: 'Filter',
     movement: 'Stilrichtung',
     category: 'Kategorie',
@@ -293,6 +343,16 @@ const UI = {
     allMuseums: 'Todos os museus',
     topArtists: 'Artistas com mais obras',
     restInSearch: 'Para os restantes, usa a pesquisa',
+    allArtists: 'Artistas',
+    sortHint: 'Clica numa coluna para ordenar',
+    colMuseum: 'Museu',
+    colArtist: 'Artista',
+    colNationality: 'Nacionalidade',
+    colYears: 'Anos',
+    colWorks: 'Obras',
+    searchArtists: 'Procurar um artista…',
+    noArtists: 'Nenhum artista com esse nome.',
+    bc: 'a.C.',
     filters: 'Filtros',
     movement: 'Movimento',
     category: 'Categoria',
@@ -339,6 +399,16 @@ const UI = {
     allMuseums: 'Alle musea',
     topArtists: 'Kunstenaars met de meeste werken',
     restInSearch: 'Gebruik voor de rest de zoekfunctie',
+    allArtists: 'Kunstenaars',
+    sortHint: 'Klik op een kolom om te sorteren',
+    colMuseum: 'Museum',
+    colArtist: 'Kunstenaar',
+    colNationality: 'Nationaliteit',
+    colYears: 'Jaren',
+    colWorks: 'Werken',
+    searchArtists: 'Zoek een kunstenaar…',
+    noArtists: 'Geen kunstenaar met die naam.',
+    bc: 'v.Chr.',
     filters: 'Filters',
     movement: 'Stroming',
     category: 'Categorie',
@@ -402,4 +472,26 @@ export function formatDistance(lang: Lang, meters: number): string {
 
 export function formatNumber(lang: Lang, value: number): string {
   return new Intl.NumberFormat(lang).format(value);
+}
+
+/**
+ * Los años de vida de un artista: «1746–1828», «1944», «1809 a.C.–1749 a.C.».
+ *
+ * Existe por los años negativos. Pintados en crudo salían «-1809–-1749», que no
+ * es que se lea mal: es que no se entiende, porque el guion de separación y el
+ * signo son el mismo carácter. En el catálogo hay artistas del segundo milenio
+ * antes de Cristo —Hammurabi entre ellos—, así que no es un caso de laboratorio.
+ *
+ * Y no se usa `Intl.NumberFormat` para el año: pondría el separador de millares
+ * y «1.828» no es un año, es una cantidad.
+ */
+export function formatYears(
+  lang: Lang, birth: number | null, death: number | null,
+): string | null {
+  if (birth === null && death === null) return null;
+
+  const año = (n: number) => (n < 0 ? `${-n} ${t(lang, 'bc')}` : String(n));
+
+  if (birth !== null && death !== null) return `${año(birth)}–${año(death)}`;
+  return año((birth ?? death)!);
 }

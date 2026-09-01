@@ -515,23 +515,48 @@ export async function listMovements(lang: Lang) {
  * El nombre sale de `coalesce(traducción, canónico)` como en todas partes: el
  * catálogo dice «Hieronymus Bosch» y en español hay que leer «El Bosco».
  */
-export async function listArtists(lang: Lang, limit = 200) {
-  const { data, error } = await db()
-    .from('artists')
-    .select('slug, name, birth_year, death_year, artwork_count, artist_translations ( lang, name )')
-    .gt('artwork_count', 0)
-    .order('artwork_count', { ascending: false })
-    .limit(limit);
+export async function listArtists(
+  lang: Lang,
+  opciones: {
+    q?: string;
+    sort?: 'name' | 'works' | 'nat' | 'anios';
+    dir?: 'asc' | 'desc';
+    limit?: number;
+    offset?: number;
+  } = {},
+) {
+  const { q = '', sort = 'works', dir = 'desc', limit = 60, offset = 0 } = opciones;
+
+  const { data, error } = await db().rpc('list_artists', {
+    p_lang: lang,
+    p_q: q || null,
+    p_sort: sort,
+    p_dir: dir,
+    p_limit: limit,
+    p_offset: offset,
+  });
 
   if (error) throw new Error(`artistas: ${error.message}`);
 
-  return (data ?? []).map((a: any) => ({
-    slug: a.slug as string,
-    name: (pick(a.artist_translations, lang)?.name ?? a.name) as string,
-    birthYear: a.birth_year as number | null,
-    deathYear: a.death_year as number | null,
-    count: a.artwork_count as number,
-  }));
+  const filas = (data ?? []) as {
+    slug: string; name: string; nationality: string | null;
+    birth_year: number | null; death_year: number | null;
+    artwork_count: number; total: number;
+  }[];
+
+  return {
+    artistas: filas.map((a) => ({
+      slug: a.slug,
+      name: a.name,
+      nationality: a.nationality,
+      birthYear: a.birth_year,
+      deathYear: a.death_year,
+      count: a.artwork_count,
+    })),
+    // El total viaja repetido en cada fila (`count(*) over ()`); sin filas es 0,
+    // que es justo lo que significa una búsqueda sin resultados.
+    total: Number(filas[0]?.total ?? 0),
+  };
 }
 
 /**

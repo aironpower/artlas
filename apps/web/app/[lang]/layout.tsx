@@ -3,6 +3,7 @@ import { Montserrat } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { isLang, t, LANGS } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 import SearchBox from '@/components/SearchBox';
 import { LanguagePicker, LanguagePickerSinFiltros } from '@/components/LanguagePicker';
 import '../globals.css';
@@ -47,6 +48,21 @@ export default async function LangLayout(
             <LanguagePicker current={lang} />
           </Suspense>
         </header>
+
+        {/*
+          * Museos y artistas viven aquí, en una fila propia, y no en la barra
+          * de arriba: allí ya se reparten el sitio el logo, el buscador y tres
+          * idiomas, y en un teléfono de 390 px al buscador le quedaban 40 px.
+          * Meterle dos enlaces más lo dejaría otra vez sin espacio.
+          *
+          * Van en todas las páginas porque el problema era justamente que a
+          * museos y artistas solo se llegaba de rebote.
+          */}
+        <nav className="shell secciones" aria-label={t(lang, 'explore')}>
+          <Link href={path(lang, 'museums')}>{t(lang, 'allMuseums')}</Link>
+          <Link href={path(lang, 'artists')}>{t(lang, 'allArtists')}</Link>
+          <Link href={path(lang, 'search')}>{t(lang, 'searchAction')}</Link>
+        </nav>
 
         <main className="shell">{children}</main>
 

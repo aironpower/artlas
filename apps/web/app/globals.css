@@ -587,24 +587,81 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
 }
 .section-head h2 { margin: 0; }
 
-/* --- Los índices de museos y artistas ---------------------------------------
+/* --- Las tablas de museos y artistas -----------------------------------------
  *
- * Una lista de nombres, a dos columnas en pantalla ancha. Doscientos artistas
- * en una sola columna son dos metros de scroll para algo que se recorre con la
- * vista, no leyendo: dos columnas lo parten y siguen entrando de un vistazo.
+ * Se ordenan pulsando una cabecera, y la cabecera es un enlace: el orden vive
+ * en la URL. De ahí que no haya `cursor: pointer` inventado ni estado en JS.
  *
- * `break-inside: avoid` porque sin él una fila se parte por la mitad entre el
- * final de una columna y el principio de la otra, y el nombre queda arriba y su
- * número de obras abajo del todo a la izquierda.
+ * `tabla-scroll` existe porque en un móvil de 390 px cuatro columnas no caben
+ * por mucho que se aprieten. Antes que romper los nombres en cinco líneas, la
+ * tabla se desliza dentro de su caja y la página no se mueve de sitio.
  */
-.listado { list-style: none; margin: 20px 0 40px; padding: 0; columns: 2; column-gap: 40px; }
-.listado li {
-  break-inside: avoid;
-  padding: 9px 0;
-  border-top: 1px solid var(--border);
+.tabla-scroll { overflow-x: auto; margin: 18px 0 8px; }
+
+.tabla { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+
+.tabla th {
+  text-align: left; font-weight: 600; font-size: 0.82rem;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0 14px 8px 0; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-@media (max-width: 560px) { .listado { columns: 1; } }
+.tabla th a { color: inherit; text-decoration: none; }
+.tabla th a:hover { color: var(--text); }
+
+/* La columna que manda, en el acento: es la única marca de posición que hay
+   en la tabla, y el acento sirve justo para eso. */
+.tabla th a.orden-activo { color: var(--accent); }
+
+.tabla td {
+  padding: 9px 14px 9px 0; border-bottom: 1px solid var(--border);
+  vertical-align: baseline;
+}
+
+/* Los números, a la derecha y tabulares: así las cifras se comparan de un
+   vistazo en vertical, que es para lo que se ordena por ellas. */
+.tabla td.num {
+  text-align: right; padding-right: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla th:last-child { padding-right: 0; text-align: right; }
+
+.buscador-lista { display: flex; gap: 8px; align-items: center; padding-top: 14px; }
+.buscador-lista input[type="search"] { flex: 1 1 auto; min-width: 0; }
+
+/*
+ * En un teléfono, una columna se va.
+ *
+ * Con cuatro columnas en 390 px la tabla se desliza —para eso está
+ * `tabla-scroll`— pero lo que queda fuera de la pantalla es la última, que es
+ * el número de obras: justo el dato por el que la lista viene ordenada. Un
+ * dato que hay que buscar deslizando es un dato que no está.
+ *
+ * Se quita la que menos añade: el país en los museos, porque la ciudad ya lo
+ * dice casi siempre —«Madrid», «Londres»—, y la nacionalidad en los artistas,
+ * que además viene en inglés de Wikidata. Se sigue pudiendo ordenar por ellas
+ * en pantalla grande, y en el móvil se puede seguir deslizando.
+ */
+@media (max-width: 560px) {
+  .tabla .col-opcional { display: none; }
+}
+
+/* --- Las secciones, bajo la cabecera -----------------------------------------
+ *
+ * Museos y artistas van aquí y no en la barra de arriba porque allí ya se
+ * reparten el sitio el logo, el buscador y tres idiomas: en un teléfono de
+ * 390 px al buscador le quedaban 40 px, y meterle dos enlaces más lo dejaría
+ * otra vez sin espacio. Una segunda fila fina no le quita nada a nadie.
+ */
+.secciones {
+  display: flex; gap: 18px; align-items: center;
+  padding: 8px 0 0; font-size: 0.86rem;
+}
+
+.secciones a { color: var(--muted); text-decoration: none; }
+.secciones a:hover { color: var(--accent); }
 
 /* --- La rejilla en el móvil ------------------------------------------------
  *
