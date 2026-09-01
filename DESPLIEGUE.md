@@ -43,8 +43,14 @@ migraciones, que corren desde tu máquina. Quien tenga la `anon` solo puede leer
 lo que dejan ver las políticas RLS.
 
 `NEXT_PUBLIC_SITE_URL` importa más de lo que parece: es a donde vuelve el enlace
-mágico del panel ([entrar/page.tsx](apps/web/app/[lang]/admin/entrar/page.tsx)).
-Si se queda en `localhost:3111`, el correo de acceso te manda a tu portátil.
+de acceso ([entrar/page.tsx](apps/web/app/[lang]/entrar/page.tsx)). Si se queda
+en `localhost:3111`, el correo te manda a tu portátil.
+
+**Desde el 1 de septiembre la entrada es de la web y no del panel**: vive en
+`/entrar`, sirve a cualquiera —los favoritos necesitan cuenta— y admite
+contraseña además del enlace al correo. `/admin/entrar` sigue existiendo como
+redirección. Entrar NO da permisos: crea un perfil `viewer`, y a administrador
+se asciende con un UPDATE en `profiles`.
 
 ### 3. El dominio
 

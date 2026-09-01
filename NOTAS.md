@@ -4,45 +4,90 @@ Estado al 1 de septiembre de 2026 y lo siguiente a hacer.
 
 ---
 
-## AL EMPEZAR: lo que queda por hacer
+## AL EMPEZAR
 
-Nada está corriendo. El catálogo está sano: **269.159 obras** (135.261
-publicadas), **48 de 48 museos completos**, **374 MB** de los 500 del plan
-gratuito.
+**No hay nada corriendo** y el árbol de git está limpio. Cifras del 1 de
+septiembre de 2026, al cerrar:
 
-**Lo que Manuel quiere que se haga, por orden:**
+| | |
+|---|---|
+| Obras | 269.159 (135.259 publicadas, 133.898 esperando) |
+| Imágenes verificadas | 135.260 de 135.261 · **0 rotas** |
+| Artistas con obra | 11.425 |
+| Museos | 48 de 48, en 34 ciudades |
+| Movimientos con obra | 186 |
+| Hallazgos abiertos | 43 |
+| Migraciones | `0001`–`0037`, todas aplicadas |
+| Espacio | **416 MB** de los 500 |
 
-1. **La aplicación de ingesta.** Hecho el 29 de agosto: ver la ingesta en vivo,
-   y **pedir y parar los trabajos desde la web**. Arranca el trabajador
-   (`trabajador.cmd`, doble clic) y todo se maneja desde `/es/admin/ingesta`.
-   Los **formularios** también están: obras y artistas (0028-0031) y, desde el
-   29 por la noche, museos, movimientos y los textos de cada idioma (0033), con
-   listas para navegarlos en `/es/admin/catalogo`. Sección **HECHO: corregir el
-   catálogo entero a mano**. Y el 31, las **quince ciudades** que Wikidata dejó
-   como barrio o distrito: sección **HECHO: las ciudades, corregidas**.
+**Ojo al espacio**: son 416 y no los 374 de por la mañana. No entró nada nuevo
+—lo que engordó fue marcar `image_checked_at` en 135.000 filas de `artworks`, que
+son 241 MB de tabla, y las filas muertas que eso deja—. El autovacuum lo va
+devolviendo; si urge, `vacuum full artworks` (necesita hueco libre del tamaño de
+la tabla). **Comprobarlo antes de meter un museo grande.**
 
-2. ~~La Galería Nacional de Arte~~. **Ya no falta**: entró entera el 29 de
-   agosto, 48 de 48 museos. Este punto llevaba días viejo en esta lista; la
-   sección «HECHO: la Galería Nacional de Arte entró entera» es la buena.
+### Lo que queda por hacer, por orden
 
-3. ~~Imágenes de las obras que esperan~~. **Hecho el 1 de septiembre**: 9.894
-   imágenes del Nationalmuseum rellenadas y publicadas, y la verificación de
-   imágenes reescrita para que dure minutos y no días. Sección **HECHO: las
-   imágenes, y lo que costó verlas**.
+1. **Ingesta incremental.** No rehidratar desde Wikidata lo que ya tenemos
+   igual. Es lo que más rinde de cara a seguir metiendo museos, y lo único
+   grande que sigue entero sin empezar.
 
-4. **Ingesta incremental**: no rehidratar desde Wikidata lo que ya tenemos
-   igual. Es lo que más rinde de cara a seguir metiendo museos.
+2. **Rotar la contraseña de la base**, que pasó por una conversación.
 
-5. **Rotar la contraseña de la base**, que pasó por una conversación.
+3. **Dos cabos de datos, de un rato cada uno:**
+   - «The Trojan horse» (obra 87171) apunta a `nationalmuseum.iiifhosting.com`
+     —sin el «se»— y ese host no existe. Comprobado: el host bueno da 404 para
+     ese identificador y su número de inventario no está en el catálogo del
+     museo. **No tiene imagen buena en ninguna parte**, así que toca vaciarle
+     `image_url` para que vuelva a la cola, como se hizo con las dos que
+     apuntaban a un `.well-known/genid` de Wikidata.
+   - **Los movimientos no tienen época**: `start_year` y `end_year` están a null
+     en los 186. La ingesta nunca los pidió (P580 y P582). Con eso, la tabla de
+     `/es/movimientos` recupera su columna.
 
-6. **El repaso visual de la web**, casi terminado. Hechos el color, el mapa de
-   papel, la ficha con salida, las dos columnas del móvil y los esqueletos de
-   carga. Quedan dos cosas: **limpiar el ruido de los títulos de Wikidata**
-   («El columpio (Goya)») y las **View Transitions** con precarga al pasar el
-   ratón. Secciones **Lo hecho en la web el 28** y **el 29 (tarde)**.
+4. **Del repaso visual quedan dos cosas**: limpiar el ruido de los títulos de
+   Wikidata («El columpio (Goya)») y las **View Transitions** con precarga al
+   pasar el ratón. Todo lo demás está hecho.
+
+5. **Decisiones que Manuel tiene pendientes, no trabajo:**
+   - ¿Puede registrarse cualquiera? Hoy sí: con un correo válido se crea perfil
+     `viewer`, que no da ningún permiso. Si no se quiere, hay que cerrar el
+     registro en Supabase.
+   - Las **nacionalidades** salen de Wikidata en inglés y sin traducir —«Tang
+     dynasty», «Kingdom of Pergamon»—, y muchas son estados que ya no existen.
+   - El buscador **no filtra por museo concreto**; por ciudad sí.
+
+### Lo primero que conviene hacer al volver
+
+**Ponerte una contraseña**, si no lo has hecho: entra una vez por enlace al
+correo y pásate por `/es/entrar/clave`. A partir de ahí entras directo, sin
+esperar un correo cada vez.
 
 Y una advertencia que ahorra una noche: **no usar `reanudar-ingesta.cmd`**, que
 no es de fiar. El comando que sí funciona está en la sección siguiente.
+
+### Lo hecho en la sesión del 31 de agosto y el 1 de septiembre
+
+Por si se busca algo concreto; cada punto tiene su sección con el porqué.
+
+- **Las quince ciudades** que Wikidata dejaba como barrio o distrito. 38 → 34.
+- **9.894 imágenes** del Nationalmuseum, rellenadas y publicadas. El conector
+  llevaba cuatro días escrito y **nunca ejecutado**, y construía todas sus URLs
+  mal.
+- **La verificación de imágenes**, de tres días y medio a minutos, preguntando a
+  Commons por lotes de 50. Y dos fallos que solo aparecieron al terminarla: los
+  lotes morían por URL demasiado larga, y **una imagen rota se daba por
+  arreglada en la pasada siguiente**.
+- **121 MB recuperados**: `audit_findings` guardaba una fila por obra para decir
+  lo que la obra ya decía.
+- **Traducciones de los cuatro idiomas que no servimos**, borradas: estaban
+  congeladas y ya eran mentira.
+- **Cambiar de idioma sin perder la página**, que llevaba a la portada.
+- **Museos, artistas y movimientos**: tablas ordenables, con buscador y filtros
+  en artistas, y enlaces en la barra. Antes no había forma de llegar a esas
+  fichas si no era de rebote.
+- **Cuentas y favoritos**, y que el admin corrija desde la ficha pública y desde
+  la bandeja de hallazgos.
 
 ---
 
@@ -52,8 +97,8 @@ El catálogo pasó de **6.161 obras a 269.159**. Lo que cambió no fue solo el
 tamaño: cambió la idea. Antes se descartaba lo que no se podía enseñar; ahora se
 guarda todo y una columna dice qué es visible.
 
-Cifras del **1 de septiembre de 2026**, tras entrar la Galería Nacional de Arte
-y rellenar las imágenes del Nationalmuseum:
+Cifras del **1 de septiembre de 2026** al cerrar la sesión (la tabla de arriba,
+en «AL EMPEZAR», es la misma y manda si divergen):
 
 | | |
 |---|---|
@@ -84,12 +129,14 @@ traducciones viejas no era un atajo para eso.
 
 **Ojo al espacio, que ha dado un susto.** Llegó a 495 MB —el 99%— y no por las
 obras: `audit_findings` se había comido 121 MB guardando una fila por obra para
-decir cosas que la obra ya decía. Corregido, la base está en 374 MB. Las obras
+decir cosas que la obra ya decía. Corregido, bajó a 374 MB, y al cerrar la
+sesión está en 416: verificar las imágenes reescribió 135.000 filas de
+`artworks` y las filas muertas todavía ocupan. El autovacuum lo devuelve. Las obras
 salen a ~0,89 KB, así que quedan unas 140.000 de margen. Conviene mirarlo
 (`npm run check-db`) antes de meter un museo grande, y **desconfiar de lo que
 crece sin ser el catálogo**.
 
-Migraciones `0001`–`0033`, **todas aplicadas** (comprobado el 31 de agosto con
+Migraciones `0001`–`0037`, **todas aplicadas** (comprobado el 1 de septiembre con
 `npm run migrate -- --status`). Ya no se aplican a mano: `npm run migrate`.
 
 Hay además un **panel de revisión** en `/[lang]/admin`, con acceso por enlace
