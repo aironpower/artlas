@@ -67,6 +67,21 @@ y rellenar las imágenes del Nationalmuseum:
 | Espacio | **374 MB** de los 500 del plan gratuito (74,8%) |
 | Idiomas | es, en, fr (eran 7; se recortó por espacio) |
 
+**Y las traducciones de los otros cuatro, borradas el 1 de septiembre.** Quedaban
+16.819 filas en alemán, italiano, neerlandés y portugués, restos de cuando la
+ingesta pedía siete idiomas. No se borraron por espacio —eran 3,6 MB, un 1%—
+sino porque **estaban congeladas y ya eran mentira**: la ingesta solo pide
+es/en/fr desde el recorte, así que no se actualizan nunca, y en esos cuatro
+idiomas el Louvre seguía en «Saint-Germain-l'Auxerrois» y el Met en «Manhattan»
+porque las ciudades se corrigieron solo en lo que se enseña. La cobertura además
+era simbólica: el alemán llegaba a 3.736 obras de 269.159, un 1,4%.
+
+**La tabla `languages` se queda con sus siete filas** y no es descuido: son la
+definición —qué diccionario de Postgres usa cada idioma— y la receta para
+reactivar uno. Se borraron los datos, no el mapa. Reactivar un idioma sigue
+siendo añadirlo a `LANGUAGES` en `types.ts` y **reingerir**; tener medias
+traducciones viejas no era un atajo para eso.
+
 **Ojo al espacio, que ha dado un susto.** Llegó a 495 MB —el 99%— y no por las
 obras: `audit_findings` se había comido 121 MB guardando una fila por obra para
 decir cosas que la obra ya decía. Corregido, la base está en 374 MB. Las obras
