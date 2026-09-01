@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import { isLang, t, formatNumber, type Lang } from '@/lib/i18n';
+import { isLang, t, formatNumber, capitalize, type Lang } from '@/lib/i18n';
 import { currentUser, supabaseServer } from '@/lib/auth';
 import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
@@ -64,12 +64,12 @@ export default async function Favoritos({ params }: Props) {
           lang={idioma}
           items={obras.map((o) => ({
             id: o.id,
-            title: o.title,
+            title: capitalize(o.title),
             image_url: o.image_url,
             year_start: o.year_start,
             date_display: o.date_display,
-            artist_name: o.artist_name,
-            institution_name: o.institution_name,
+            artist_name: o.artist_name && capitalize(o.artist_name),
+            institution_name: o.institution_name && capitalize(o.institution_name),
             /* Los derechos deciden si la imagen se enseña entera, en miniatura
              * o no se enseña; es la misma política que el buscador. */
             image_mode: imageModeFor(

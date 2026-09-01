@@ -229,7 +229,10 @@ export async function searchArtworks(
    */
   if (error?.code === '57014') throw new BusquedaDemasiadoAncha();
   if (error) throw new Error(`búsqueda: ${error.message}`);
-  return hideRestrictedImage((data ?? []) as ArtworkCard[]);
+  return conInicialMayuscula(
+    hideRestrictedImage((data ?? []) as ArtworkCard[]),
+    ['title', 'artist_name', 'institution_name'],
+  );
 }
 
 export async function artworksNear(
@@ -249,7 +252,10 @@ export async function artworksNear(
   });
 
   if (error) throw new Error(`cercanas: ${error.message}`);
-  return hideRestrictedImage((data ?? []) as NearbyArtwork[]);
+  return conInicialMayuscula(
+    hideRestrictedImage((data ?? []) as NearbyArtwork[]),
+    ['title', 'artist_name', 'institution_name'],
+  );
 }
 
 /**
@@ -276,7 +282,10 @@ export async function artworksByInstitution(
   });
 
   if (error) throw new Error(`obras de ${slug}: ${error.message}`);
-  return hideRestrictedImage((data ?? []) as MuseumWork[]);
+  return conInicialMayuscula(
+    hideRestrictedImage((data ?? []) as MuseumWork[]),
+    ['title', 'artist_name'],
+  );
 }
 
 export async function mapPins(lang: Lang): Promise<MapPin[]> {
@@ -314,7 +323,7 @@ export async function getArtist(lang: Lang, slug: string): Promise<Artist | null
   const { data, error } = await db().rpc('get_artist', { p_slug: slug, p_lang: lang });
 
   if (error) throw new Error(`artista ${slug}: ${error.message}`);
-  return ((data ?? []) as Artist[])[0] ?? null;
+  return conInicialMayuscula((data ?? []) as Artist[], ['name'])[0] ?? null;
 }
 
 /**
@@ -338,7 +347,10 @@ export async function artworksByArtist(
   });
 
   if (error) throw new Error(`obras de ${slug}: ${error.message}`);
-  return hideRestrictedImage((data ?? []) as ArtistWork[]);
+  return conInicialMayuscula(
+    hideRestrictedImage((data ?? []) as ArtistWork[]),
+    ['title', 'institution_name'],
+  );
 }
 
 /**
@@ -359,6 +371,35 @@ function hideRestrictedImage<T extends { image_url: string | null; image_mode?: 
 ): T[] {
   return rows.map((row) =>
     row.image_mode && row.image_mode !== 'full' ? { ...row, image_url: null } : row);
+}
+
+/**
+ * Primera letra en mayúscula en las etiquetas del catálogo.
+ *
+ * No es cosmética de última hora: 810 obras publicadas se llaman «portrait of
+ * a learned man» o «paysage de rivière», y 63 movimientos, «realism». Vienen
+ * así de Wikidata, que escribe las etiquetas como se escribirían dentro de una
+ * frase. En una ficha o en una tarjeta no están dentro de ninguna frase: son
+ * el nombre de la cosa, y ahí una minúscula inicial se lee como un descuido.
+ *
+ * Se hace al leer y NO se corrige en la base a propósito. Lo que hay en
+ * `artworks.title` es lo que dice la fuente, y la ingesta lo vuelve a escribir
+ * en cada pasada: una corrección guardada duraría hasta el siguiente refresco.
+ * Además, el día que se quiera comparar con la fuente hay que tener lo que la
+ * fuente dijo, no lo que nos gustó más.
+ *
+ * Solo la inicial, como `capitalize`: pasar la cadena entera por un `initcap`
+ * destrozaría «bust of Michel de Marolles».
+ */
+function conInicialMayuscula<T>(rows: T[], campos: (keyof T)[]): T[] {
+  return rows.map((row) => {
+    const copia = { ...row };
+    for (const campo of campos) {
+      const valor = copia[campo];
+      if (typeof valor === 'string' && valor) copia[campo] = capitalize(valor) as T[keyof T];
+    }
+    return copia;
+  });
 }
 
 /** Servidores cuyo alojamiento ya afirma que el fichero es libre. Misma lista
@@ -445,7 +486,7 @@ function localizeArtwork(row: any, lang: Lang) {
   return {
     id: row.id as number,
     slug: row.slug as string,
-    title: text?.title ?? row.title,
+    title: capitalize(text?.title ?? row.title),
     description: text?.description ?? null,
     medium: text?.medium ?? null,
     genre: text?.genre ?? null,
@@ -479,7 +520,7 @@ function localizeArtwork(row: any, lang: Lang) {
       ? {
           id: row.artists.id as number,
           slug: row.artists.slug as string,
-          name: artistText?.name ?? row.artists.name,
+          name: capitalize(artistText?.name ?? row.artists.name),
           description: artistText?.description ?? null,
           birthYear: row.artists.birth_year as number | null,
           deathYear: row.artists.death_year as number | null,
@@ -490,7 +531,7 @@ function localizeArtwork(row: any, lang: Lang) {
       ? {
           id: row.institutions.id as number,
           slug: row.institutions.slug as string,
-          name: instText?.name ?? row.institutions.name,
+          name: capitalize(instText?.name ?? row.institutions.name),
           city: instText?.city ?? row.institutions.city,
           country: instText?.country ?? row.institutions.country,
           website: row.institutions.website as string | null,
@@ -580,7 +621,7 @@ export async function listArtists(
   return {
     artistas: filas.map((a) => ({
       slug: a.slug,
-      name: a.name,
+      name: capitalize(a.name),
       nationality: a.nationality,
       birthYear: a.birth_year,
       deathYear: a.death_year,
