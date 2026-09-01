@@ -20,13 +20,14 @@ completos, 214 MB de los 500 del plan gratuito.
    catálogo entero a mano**. Y el 31, las **quince ciudades** que Wikidata dejó
    como barrio o distrito: sección **HECHO: las ciudades, corregidas**.
 
-2. **La Galería Nacional de Arte** (`Q214867`), el único museo que falta. Ya
-   está medido y el arreglo identificado —partir la consulta por titulares de
-   ≤5—, pero **hay que volver a medir con WDQS sano** antes de escribirlo.
-   Sección propia.
+2. ~~La Galería Nacional de Arte~~. **Ya no falta**: entró entera el 29 de
+   agosto, 48 de 48 museos. Este punto llevaba días viejo en esta lista; la
+   sección «HECHO: la Galería Nacional de Arte entró entera» es la buena.
 
-3. **Imágenes de las obras que esperan**: `fill-images` (Nationalmuseum, ~23.000
-   obras), luego `promote` y `audit -- --images`.
+3. ~~Imágenes de las obras que esperan~~. **Hecho el 1 de septiembre**: 9.894
+   imágenes del Nationalmuseum rellenadas y publicadas, y la verificación de
+   imágenes reescrita para que dure minutos y no días. Sección **HECHO: las
+   imágenes, y lo que costó verlas**.
 
 4. **Ingesta incremental**: no rehidratar desde Wikidata lo que ya tenemos
    igual. Es lo que más rinde de cara a seguir metiendo museos.
@@ -49,23 +50,27 @@ El catálogo pasó de **6.161 obras a 147.869**. Lo que cambió no fue solo el
 tamaño: cambió la idea. Antes se descartaba lo que no se podía enseñar; ahora se
 guarda todo y una columna dice qué es visible.
 
-Cifras del 29 de agosto de 2026, tras entrar el Met (21.291 obras él solo):
+Cifras del **1 de septiembre de 2026**, tras entrar la Galería Nacional de Arte
+y rellenar las imágenes del Nationalmuseum:
 
 | | |
 |---|---|
-| Obras en total | 147.869 |
-| Publicadas (visibles en la app) | 76.667 |
-| Esperando datos | 71.200 |
+| Obras en total | 269.159 |
+| Publicadas (visibles en la app) | **135.261** |
+| Esperando datos | 133.896 |
 | Rechazadas (no son obras) | 2 |
-| Artistas | 17.616 |
-| Museos en el mapa | 48 (47 completos; falta la Galería Nacional de Arte) |
-| Espacio | **214 MB** de los 500 del plan gratuito (42,8%) |
+| Artistas | 21.619 |
+| Museos en el mapa | **48 de 48, ninguno a medias** |
+| Ciudades | 34 (eran 38; quince eran barrios o distritos) |
+| Espacio | **374 MB** de los 500 del plan gratuito (74,8%) |
 | Idiomas | es, en, fr (eran 7; se recortó por espacio) |
 
-**Ojo al espacio**: eran ~160 MB con 124.600 obras y ahora son 214 con 147.869,
-o sea ~1,45 KB por obra. Quedan unas 195.000 obras de margen antes de tocar los
-500 MB. Sigue habiendo sitio para más museos, pero ya no es ilimitado y conviene
-mirarlo (`npm run check-db`) antes de meter uno grande.
+**Ojo al espacio, que ha dado un susto.** Llegó a 495 MB —el 99%— y no por las
+obras: `audit_findings` se había comido 121 MB guardando una fila por obra para
+decir cosas que la obra ya decía. Corregido, la base está en 374 MB. Las obras
+salen a ~0,89 KB, así que quedan unas 140.000 de margen. Conviene mirarlo
+(`npm run check-db`) antes de meter un museo grande, y **desconfiar de lo que
+crece sin ser el catálogo**.
 
 Migraciones `0001`–`0025`, **todas aplicadas** (comprobado el 29 de agosto con
 `npm run migrate -- --status`). Ya no se aplican a mano: `npm run migrate`.
@@ -798,6 +803,101 @@ mira la lista y ya; cuando sean 500, hay que subir por la cadena de `P131`.
 
 ---
 
+## HECHO: las imágenes, y lo que costó verlas (1 de septiembre de 2026)
+
+**9.894 imágenes rellenadas y publicadas.** El catálogo pasa de 125.367 a
+**135.261 obras publicadas**. Salieron de cruzar las 23.214 obras del
+Nationalmuseum que esperaban con las 88.208 de su catálogo que tienen imagen y
+número de inventario.
+
+**El conector llevaba desde el 28 de agosto escrito y sin ejecutar, y estaba
+roto.** Construía las URLs con ancho 1280 y ese servidor IIIF **devuelve 501 a
+ese ancho siempre**: es de nivel 1 y solo sirve anchos cerca del mayor tamaño
+que declara cada imagen, que varía —se midieron topes de 800, 700 y menos de
+700 en tres obras—. Se habrían escrito ~11.000 imágenes rotas sin que nadie lo
+notara hasta abrir una ficha, y con el agravante de que esas obras ya no
+vuelven a la cola de las que esperan. Ahora usa el original (`full/full`), que
+respondió en las 24 de la muestra y pesa 0,1-0,2 MB porque vienen ya
+comprimidas. También recorta la barra final de la base, que traían las 24.
+
+**Y se le puso el seguro que faltaba**: antes de escribir nada comprueba que
+veinte imágenes repartidas cargan de verdad, y si alguna falla aborta sin tocar
+la base. Es lo que habría cazado esto solo.
+
+De paso se volvió a medir la premisa del conector, que era de agosto: no es el
+51,4% de objetos cruzables sino el **33,6%** (1.234 objetos de trece páginas).
+**Ojo con la página 1 de esa API**, que es atípica: sus cien objetos no tienen
+número de inventario y solo uno trae imagen, así que una sonda que mire solo el
+principio concluye que la API se ha roto.
+
+### La verificación pasó de tres días y medio a media hora
+
+La comprobación de imágenes descargaba una a una. Medido: **Wikimedia deja
+pasar unas once peticiones seguidas y a partir de ahí devuelve 429 en el acto**,
+así que con los reintentos la media era de 3 s por imagen. Las 125.000 del
+catálogo eran **tres días y medio de máquina**. Una noche entera dio 10.000
+comprobadas, todas correctas.
+
+Ahora se le pregunta a la API de Commons por **50 ficheros en una petición**:
+dice si cada uno existe y cuál es su miniatura de 500 px. **10.000 imágenes en
+4 minutos**, unas cien veces más rápido.
+
+Dos cosas que hubo que medir para que el veredicto no mintiera:
+
+- **Comparar las URLs enteras da 100 de 100 distintas siendo todas la misma
+  imagen.** Commons devuelve hoy `thumb.wikimedia.org` con parámetros de
+  seguimiento donde nosotros construimos `upload.wikimedia.org`, y codifica los
+  paréntesis que nosotros dejamos literales. Se comparan **rutas
+  decodificadas**.
+
+- **Una ruta distinta no es una imagen rota.** Para un `.tiff` Commons prefiere
+  `lossless-….png` y nosotros pedimos `lossy-….jpg`; para un `.webp` él añade
+  `.png`. Comprobado a mano: **las dos cargan**. Pero tampoco se puede dar por
+  bueno sin mirar, porque el fallo que dejó 86 obras sin imagen era exactamente
+  un sufijo mal construido. La salida: comprobar **una por extensión** y aplicar
+  el veredicto a su grupo, que el sufijo lo decide la extensión.
+
+Lo que no es de Commons —las 9.894 del Nationalmuseum, tres del Met— sigue por
+descarga directa: son pocas y sus servidores no nos limitan.
+
+### El susto del espacio: 121 MB en decir lo que ya sabíamos
+
+La base llegó a **495 MB de los 500** del plan. Lo que había crecido era
+`audit_findings`: 121 MB —59 de tabla y 62 de índices— con 276.227 filas. Y
+**275.885 de ellas eran tres reglas de bulto**: `image_missing` (143.790),
+`artist_missing` (68.851) y `date_missing` (63.244), una fila por obra
+repitiendo lo que la propia obra ya dice. `image_missing` es literalmente
+`status = 'pending'` sin `image_url`. Se estaba pagando **el 24% de la base**
+por un dato duplicado.
+
+Ahora esas tres se cuentan en el resumen y no se guardan fila a fila. Borradas
+las existentes y compactada la tabla: **495 → 374 MB**, `audit_findings` de 121
+MB a 200 kB, y quedan los 342 hallazgos que sí piden mirada humana. No se perdió
+nada de nadie: había **0 hallazgos con `reviewed_by` y 0 con nota** en 276.227.
+
+### Tres tropiezos de la noche, para no repetirlos
+
+**Una condición de espera que se dispara antes de tiempo es peor que no
+esperar.** El encadenado de la noche buscaba en el log de `fill-images` la línea
+«obras encontradas con imagen», que se imprime ANTES de escribir. `promote`
+corrió cinco minutos antes de tiempo y publicó cero. Hubo que repetirlo a mano.
+Si se espera a un proceso, hay que esperar a la línea que solo existe cuando ha
+terminado de verdad.
+
+**`--image-budget 3000` comprobaba 1.000.** PostgREST devuelve 1.000 filas como
+mucho y el `.limit(3000)` se aceptaba sin rechistar. Un parámetro que miente en
+silencio es la peor clase de fallo: la traza decía «Comprobando 1000» y nadie
+lo miraba. Ahora se pide por páginas, con desempate por `id` —sin él, ordenar
+por una columna nula en decenas de miles de filas deja el orden a criterio del
+planificador y dos páginas pueden repetir obras y saltarse otras—.
+
+**Estimar el ritmo por la configuración en vez de medirlo.** Se dijo «dos a la
+vez cada 400 ms, o sea ~2,9 img/s, o sea 12 horas» y el ritmo real era 0,33
+img/s y 3 días y medio. La configuración dice lo que se pide, no lo que el otro
+lado concede. Medir una muestra habría costado dos minutos.
+
+---
+
 ## Otras cosas pendientes
 
 ### Los cinco conectores de imágenes que quedaron aparcados
@@ -839,6 +939,21 @@ inventario? Medir antes de construir.
 ---
 
 ## Tropiezos de método, para no repetirlos
+
+**El ritmo se mide, no se deduce de la configuración.** «Dos peticiones cada
+400 ms» dice lo que se PIDE, no lo que el otro lado concede. Se estimaron 12
+horas de verificación de imágenes y el ritmo real daba tres días y medio, porque
+Wikimedia limita tras once peticiones seguidas. Una muestra de veinte
+peticiones, dos minutos, lo habría dicho.
+
+**Desconfiar de lo que crece sin ser el catálogo.** La base llegó al 99% del
+plan y no fueron las obras: una tabla derivada guardaba 121 MB para repetir lo
+que el catálogo ya decía. Cuando el espacio se dispare, mirar `pg_total_relation_size`
+tabla a tabla antes de suponer de dónde viene.
+
+**Una herramienta escrita y nunca ejecutada no está hecha.** El conector de
+imágenes llevaba cuatro días dado por bueno y construía todas sus URLs mal.
+Nadie lo había corrido ni una vez.
 
 **Un lanzador que falla en silencio es peor que no tener lanzador.**
 `reanudar-ingesta.ps1` llevaba dos días sin lanzar un solo barrido y nadie lo

@@ -123,3 +123,172 @@ export async function checkImages<T extends { id: number; image_url: string | nu
 
   return results;
 }
+
+/* ---------------------------------------------------------------------------
+ * Por lotes, preguntándole a Commons en vez de descargar una a una.
+ *
+ * Descargar imagen a imagen no escala y está medido: Wikimedia deja pasar unas
+ * once peticiones seguidas y a partir de ahí devuelve 429 en el acto, así que
+ * con los reintentos la media salía a 3 s por imagen. Las 125.000 del catálogo
+ * eran tres días y medio de máquina.
+ *
+ * Su API contesta por 50 ficheros de una vez y dice, para cada uno, si existe y
+ * cuál es la miniatura de 500 px. Medido: 100 obras en 1,2 s con 2 peticiones,
+ * donde antes eran cinco minutos.
+ * ------------------------------------------------------------------------- */
+
+const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
+const POR_LOTE = 50;                 // el tope de `titles` para un cliente normal
+const PAUSA_LOTE_MS = 300;
+
+const ES_COMMONS = /\/wiki\/Special:FilePath\//;
+const NOMBRE_COMMONS = /\/wiki\/Special:FilePath\/(.+)$/;
+
+/** El título con el que Commons conoce el fichero: `File:Nombre con espacios.jpg`. */
+function tituloCommons(raw: string): string | null {
+  const m = NOMBRE_COMMONS.exec(raw);
+  if (!m?.[1]) return null;
+  try {
+    return `File:${decodeURIComponent(m[1]).replace(/_/g, ' ')}`;
+  } catch {
+    return null;                     // un porcentaje suelto en el nombre
+  }
+}
+
+/**
+ * La ruta, decodificada y sin host ni parámetros.
+ *
+ * Hace falta porque Commons devuelve hoy `thumb.wikimedia.org` con parámetros
+ * de seguimiento donde nosotros construimos `upload.wikimedia.org`, y codifica
+ * los paréntesis que nosotros dejamos literales. Comparar las URLs enteras
+ * daba 100 de 100 distintas siendo todas la misma imagen.
+ */
+function rutaDe(u: string): string {
+  try { return decodeURIComponent(new URL(u).pathname); } catch { return u; }
+}
+
+const extensionDe = (titulo: string) => titulo.split('.').pop()?.toLowerCase() ?? '';
+
+/**
+ * Comprueba una tanda entera: lo de Commons por lotes, lo demás una a una.
+ *
+ * Las que no son de Commons —las 9.894 del Nationalmuseum, las del Met— siguen
+ * por descarga directa: son pocas y sus servidores no nos limitan.
+ */
+export async function checkImagesBatched<T extends { id: number; image_url: string | null }>(
+  works: T[],
+  userAgent: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Map<number, ImageCheck>> {
+  const results = new Map<number, ImageCheck>();
+
+  const deCommons = works.filter((w) => w.image_url && ES_COMMONS.test(w.image_url));
+  const resto = works.filter((w) => w.image_url && !ES_COMMONS.test(w.image_url));
+
+  /*
+   * Miniaturas que no coinciden con la que declara Commons, agrupadas por
+   * extensión.
+   *
+   * Existen porque para un `.tiff` Commons prefiere `lossless-…​.png` y
+   * nosotros pedimos `lossy-…​.jpg`; para un `.webp`, él añade `.png` y
+   * nosotros no. Comprobado a mano: **las dos cargan**, son renderizados
+   * equivalentes del mismo fichero. Así que una ruta distinta NO es una imagen
+   * rota, y darla por rota marcaría miles de obras buenas.
+   *
+   * Pero tampoco se puede dar por buena sin más: el fallo que dejó 86 obras sin
+   * imagen era exactamente un sufijo mal construido. La salida es comprobar UNA
+   * por extensión y aplicar el veredicto a su grupo: el sufijo lo decide la
+   * extensión, así que una muestra por clase responde por todas.
+   */
+  const dudosas = new Map<string, { ids: number[]; url: string }>();
+
+  let hechas = 0;
+
+  for (let i = 0; i < deCommons.length; i += POR_LOTE) {
+    const lote = deCommons.slice(i, i + POR_LOTE);
+    const titulos = new Map<number, string>();
+    for (const w of lote) {
+      const t = tituloCommons(w.image_url!);
+      if (t) titulos.set(w.id, t);
+      else results.set(w.id, { verdict: 'broken', detail: 'nombre de fichero ilegible' });
+    }
+
+    if (titulos.size === 0) { hechas += lote.length; onProgress?.(hechas, works.length); continue; }
+
+    const consulta = `${COMMONS_API}?${new URLSearchParams({
+      action: 'query', format: 'json', formatversion: '2',
+      prop: 'imageinfo', iiprop: 'url|mime', iiurlwidth: '500',
+      titles: [...new Set(titulos.values())].join('|'),
+    })}`;
+
+    let json: any;
+    try {
+      const res = await fetch(consulta, { headers: { 'User-Agent': userAgent } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      json = await res.json();
+    } catch (err) {
+      // Un lote caído no afirma nada de sus 50 obras: se quedan en la cola.
+      for (const id of titulos.keys()) {
+        results.set(id, { verdict: 'unknown', detail: `lote fallido: ${String(err).slice(0, 60)}` });
+      }
+      hechas += lote.length; onProgress?.(hechas, works.length);
+      await sleep(PAUSA_LOTE_MS);
+      continue;
+    }
+
+    const porTitulo = new Map<string, any>();
+    for (const p of json.query?.pages ?? []) porTitulo.set(p.title, p);
+    // Commons normaliza los títulos (mayúsculas, espacios) y dice cómo.
+    const normalizado = new Map<string, string>();
+    for (const n of json.query?.normalized ?? []) normalizado.set(n.from, n.to);
+
+    for (const w of lote) {
+      const titulo = titulos.get(w.id);
+      if (!titulo) continue;
+
+      const pagina = porTitulo.get(normalizado.get(titulo) ?? titulo);
+      if (!pagina) { results.set(w.id, { verdict: 'unknown', detail: 'Commons no contestó por este fichero' }); continue; }
+      if (pagina.missing) { results.set(w.id, { verdict: 'broken', detail: 'el fichero no existe en Commons' }); continue; }
+
+      const suya = pagina.imageinfo?.[0]?.thumburl;
+      const nuestra = imageUrl(w.image_url!, 500);
+      if (!suya || !nuestra) { results.set(w.id, { verdict: 'unknown', detail: 'sin miniatura declarada' }); continue; }
+
+      if (rutaDe(suya) === rutaDe(nuestra)) {
+        results.set(w.id, { verdict: 'ok', detail: pagina.imageinfo[0].thumbmime ?? 'image' });
+        continue;
+      }
+
+      const ext = extensionDe(titulo);
+      const grupo = dudosas.get(ext) ?? { ids: [], url: nuestra };
+      grupo.ids.push(w.id);
+      dudosas.set(ext, grupo);
+    }
+
+    hechas += lote.length;
+    onProgress?.(hechas, works.length);
+    await sleep(PAUSA_LOTE_MS);
+  }
+
+  // Una descarga por extensión decide todo su grupo.
+  for (const [ext, grupo] of dudosas) {
+    const prueba = await checkImage(
+      // `checkImage` vuelve a construir la URL, así que se le pasa la original.
+      deCommons.find((w) => w.id === grupo.ids[0])!.image_url!, userAgent);
+
+    const detalle = prueba.verdict === 'ok'
+      ? `miniatura distinta a la que declara Commons, pero carga (.${ext})`
+      : `miniatura mal construida para .${ext}: ${prueba.detail}`;
+
+    for (const id of grupo.ids) results.set(id, { verdict: prueba.verdict, detail: detalle });
+  }
+
+  // Y lo que no es de Commons, por el camino de siempre.
+  if (resto.length > 0) {
+    const sueltas = await checkImages(resto, userAgent,
+      (d, t) => onProgress?.(deCommons.length + d, deCommons.length + t));
+    for (const [id, check] of sueltas) results.set(id, check);
+  }
+
+  return results;
+}

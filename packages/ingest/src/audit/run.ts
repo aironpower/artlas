@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDb } from '../db.js';
 import { auditArtist, auditArtwork, auditMovements } from './rules.js';
-import { checkImages } from './images.js';
+import { checkImagesBatched } from './images.js';
 import type { ArtistRow, ArtworkRow, Finding, MovementRow } from './types.js';
 
 const PAGE = 1000;   // tope de filas por petición de PostgREST
@@ -28,14 +28,16 @@ interface Args {
 }
 
 /*
- * 800 imágenes por pasada, no las 182.000 de golpe.
+ * 10.000 imágenes por pasada.
  *
- * A dos peticiones cada 400 ms son unos tres minutos: una espera razonable y
- * una carga razonable para Commons. Como se piden siempre las más antiguas sin
- * comprobar, pasadas sucesivas cubren el catálogo entero sin que ninguna dure
- * horas ni acabe limitada por ritmo.
+ * Era 800 cuando cada imagen costaba una descarga y Wikimedia nos limitaba a
+ * una cada tres segundos. Preguntando a su API de 50 en 50 son 200 peticiones y
+ * un par de minutos, así que el presupuesto puede subir dos órdenes de
+ * magnitud. Sigue habiendo tope, y por la misma razón de antes: `audit` marca
+ * lo comprobado AL TERMINAR la pasada, así que una pasada que se caiga a mitad
+ * tira su trabajo. Con 10.000 se pierde un par de minutos, no una noche.
  */
-const DEFAULT_IMAGE_BUDGET = 800;
+const DEFAULT_IMAGE_BUDGET = 10_000;
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { images: false, imageBudget: DEFAULT_IMAGE_BUDGET, dryRun: false };
@@ -117,22 +119,44 @@ if (args.images) {
    * es lo que convierte una pasada imposible (182.000 peticiones) en una
    * rutina de tres minutos que, repetida, acaba cubriéndolo todo.
    */
-  const { data: pendientes, error: errPend } = await db
-    .from('artworks')
-    .select('id, image_url, image_checked_at')
-    .not('image_url', 'is', null)
-    .order('image_checked_at', { ascending: true, nullsFirst: true })
-    .limit(args.imageBudget);
+  /*
+   * Y se pide por páginas, porque PostgREST devuelve 1.000 filas como mucho.
+   * Con un `.limit(3000)` a secas la orden se aceptaba sin rechistar y la
+   * pasada comprobaba mil: el presupuesto mentía en silencio, que es la peor
+   * forma de mentir. Se vio el 1 de septiembre de 2026 leyendo la traza, no
+   * por ningún error.
+   *
+   * El desempate por `id` no es adorno: sin él, ordenar por una columna que es
+   * nula en decenas de miles de filas deja el orden a criterio del planificador
+   * y dos páginas seguidas pueden repetir obras y saltarse otras.
+   */
+  const pendientes: { id: number; image_url: string; image_checked_at: string | null }[] = [];
 
-  if (errPend) throw new Error(`imágenes por comprobar: ${errPend.message}`);
+  for (let desde = 0; desde < args.imageBudget; desde += PAGE) {
+    const hasta = Math.min(desde + PAGE, args.imageBudget) - 1;
 
-  const cola = (pendientes ?? []) as { id: number; image_url: string }[];
-  const nunca = (pendientes ?? []).filter((w) => !w.image_checked_at).length;
+    const { data, error: errPend } = await db
+      .from('artworks')
+      .select('id, image_url, image_checked_at')
+      .not('image_url', 'is', null)
+      .order('image_checked_at', { ascending: true, nullsFirst: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta);
+
+    if (errPend) throw new Error(`imágenes por comprobar: ${errPend.message}`);
+    if (!data?.length) break;
+
+    pendientes.push(...(data as typeof pendientes));
+    if (data.length < hasta - desde + 1) break;
+  }
+
+  const cola = pendientes as { id: number; image_url: string }[];
+  const nunca = pendientes.filter((w) => !w.image_checked_at).length;
 
   console.log(`\nComprobando ${cola.length} imágenes (${nunca} nunca vistas).`);
-  console.log(`Despacio a propósito: dos a la vez. Un 429 no cuenta como imagen rota.\n`);
+  console.log(`Preguntando a Commons de 50 en 50; lo que no es suyo, una a una.\n`);
 
-  const checks = await checkImages(cola, userAgent, (done, total) => {
+  const checks = await checkImagesBatched(cola, userAgent, (done, total) => {
     if (done % 100 === 0 || done === total) process.stdout.write(`  ${done}/${total}
 `);
   });
@@ -177,6 +201,25 @@ if (args.images) {
 
 // --- Resumen ----------------------------------------------------------------
 
+/*
+ * Tres reglas se cuentan pero NO se guardan fila a fila.
+ *
+ * `image_missing`, `artist_missing` y `date_missing` daban 275.885 de los
+ * 276.227 hallazgos y ocupaban 121 MB —59 de tabla y 62 de índices— de los 500
+ * del plan. Y no dicen nada que el catálogo no diga ya: `image_missing` es
+ * literalmente `status = 'pending'` sin `image_url`, y las otras dos son un
+ * `is null` sobre su columna. Se estaba pagando el 24% de la base por guardar
+ * un dato duplicado.
+ *
+ * Siguen apareciendo en el resumen, que es donde sirven: como cifra que dice
+ * cuánto falta. Lo que desaparece es la fila por obra, que nadie iba a revisar
+ * de una en una —había 0 hallazgos con `reviewed_by` en 276.227—.
+ *
+ * La bandeja se queda con lo que sí pide mirada humana: un título que es una
+ * URL, una imagen que no carga, un año imposible, un movimiento duplicado.
+ */
+const NO_SE_GUARDAN = new Set(['image_missing', 'artist_missing', 'date_missing']);
+
 const porRegla = new Map<string, { severity: string; n: number; ejemplo: string }>();
 for (const f of findings) {
   const actual = porRegla.get(f.rule);
@@ -190,8 +233,9 @@ const filas = [...porRegla.entries()].sort(
 
 console.log(`\n${findings.length} hallazgos:\n`);
 for (const [rule, info] of filas) {
-  console.log(`  ${info.severity.padEnd(8)} ${String(info.n).padStart(5)}  ${rule}`);
-  console.log(`                    p. ej.: ${info.ejemplo.slice(0, 90)}`);
+  const soloCuenta = NO_SE_GUARDAN.has(rule) ? '  (solo se cuenta)' : '';
+  console.log(`  ${info.severity.padEnd(8)} ${String(info.n).padStart(6)}  ${rule}${soloCuenta}`);
+  console.log(`                     p. ej.: ${info.ejemplo.slice(0, 90)}`);
 }
 
 if (args.dryRun) {
@@ -201,6 +245,9 @@ if (args.dryRun) {
 
 // --- Escritura --------------------------------------------------------------
 
+const guardables = findings.filter((f) => !NO_SE_GUARDAN.has(f.rule));
+for (const regla of NO_SE_GUARDAN) rulesRun.delete(regla);
+
 /*
  * `status` NO va en el payload, y es deliberado. PostgREST convierte el upsert
  * en un ON CONFLICT DO UPDATE de las columnas que se envían: al omitirlo, un
@@ -209,7 +256,7 @@ if (args.dryRun) {
  * devolvería a 'open' todo lo que hubieras descartado y la bandeja no
  * convergería nunca.
  */
-const payload = findings.map((f) => ({
+const payload = guardables.map((f) => ({
   entity_type: f.entityType,
   entity_id: f.entityId,
   rule: f.rule,

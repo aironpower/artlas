@@ -120,13 +120,48 @@ try {
 
     encontradas.push({
       id: obra.id,
-      imageUrl: iiifImage(match.iiifBase, 1280),
-      iiifBase: match.iiifBase.replace(/^http:/, 'https:'),
+      imageUrl: iiifImage(match.iiifBase),
+      // Sin la barra final, que es como la deja el museo y sobra al componer.
+      iiifBase: match.iiifBase.replace(/^http:/, 'https:').replace(/\/+$/, ''),
       license: match.credit ?? match.license ?? 'Nationalmuseum, Estocolmo',
     });
   }
 
   console.log(`\n   ${encontradas.length} obras encontradas con imagen.`);
+
+  /*
+   * 4. Que carguen de verdad, antes de escribir miles.
+   *
+   * Existe porque el 31 de agosto de 2026 este paso construía las URLs con
+   * ancho 1280 y su servidor devuelve 501 a ese ancho SIEMPRE. Sin esta
+   * comprobación se habrían escrito ~11.000 imágenes rotas, y el fallo no se
+   * habría visto hasta que alguien abriera una ficha: una obra con imagen que
+   * no carga es peor que una obra esperando, porque ya no vuelve a esta cola.
+   *
+   * Se prueban veinte repartidas, no todas: es una comprobación de que la
+   * FORMA de la URL es buena, no un inventario.
+   */
+  if (encontradas.length > 0) {
+    const paso = Math.max(1, Math.floor(encontradas.length / 20));
+    const muestra = encontradas.filter((_, i) => i % paso === 0).slice(0, 20);
+    let rotas = 0;
+
+    console.log(`\n4. Comprobando ${muestra.length} imágenes repartidas…`);
+    for (const e of muestra) {
+      const res = await fetch(e.imageUrl, { headers: { 'User-Agent': UA } }).catch(() => null);
+      if (!res?.ok) {
+        rotas++;
+        if (rotas <= 3) console.log(`   ✗ ${res?.status ?? 'sin respuesta'}  ${e.imageUrl}`);
+      }
+    }
+
+    if (rotas > 0) {
+      throw new Error(
+        `${rotas} de ${muestra.length} imágenes no cargan. No se escribe nada: ` +
+        'arregla cómo se construye la URL antes de repetir.');
+    }
+    console.log(`   las ${muestra.length} cargan.`);
+  }
 
   if (encontradas.length === 0 || !aplicar) {
     console.log(aplicar ? '' : '\nModo seco: no se ha escrito nada.\n');
