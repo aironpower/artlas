@@ -36,12 +36,11 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
 2. **Rotar la contraseña de la base**, que pasó por una conversación.
 
 3. **Dos cabos de datos, de un rato cada uno:**
-   - ~~«The Trojan horse» (obra 87171)~~ **medio hecha, y hay que rematarla.**
-     Se le vació `image_url`, comprobado antes que el host no existe (ENOTFOUND)
-     y que el bueno da 404 para ese identificador, también en `info.json`. Falta
-     el paso que la devuelve a la cola: `npm run promote -- --apply`, que dice
-     «1 obra publicada que ya no cumple». Hasta que se ejecute, **queda una obra
-     publicada sin imagen**. El comando se bloqueó por permisos y no se forzó.
+   - ~~«The Trojan horse» (obra 87171)~~ **HECHA.** Se le vació `image_url`
+     —comprobado antes que el host no existe (ENOTFOUND) y que el bueno da 404
+     para ese identificador, también en `info.json`— y `promote --apply` la
+     devolvió a la cola como `pending / image_missing`. **Publicadas sin imagen:
+     0.**
 
      De paso salió el fallo de fondo, ya arreglado: el comprobador de imágenes
      daba `unknown` a cualquier error de red y devolvía la obra a la cola, así
@@ -49,9 +48,10 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
      ÚNICA de 135.261 sin comprobar nunca, escondida tras un «quedan 1 por
      comprobar» que no cambiaba de pasada en pasada. Ahora `ENOTFOUND` es
      veredicto de imagen rota.
-   - **Los movimientos no tienen época**: `start_year` y `end_year` están a null
-     en los 186. La ingesta nunca los pidió (P580 y P582). Con eso, la tabla de
-     `/es/movimientos` recupera su columna.
+   - ~~**Los movimientos no tienen época**~~ **HECHA**, con su sección propia
+     más abajo. `/es/movimientos` tiene su columna, ordenable, con **108 de 224**
+     movimientos fechados. No es el 100% y no puede serlo: Wikidata no da fecha
+     para los otros. Donde se mira sí llega — quince de los veinte con más obras.
 
 4. **Del repaso visual quedan dos cosas**: limpiar el ruido de los títulos de
    Wikidata («El columpio (Goya)») y las **View Transitions** con precarga al
@@ -343,6 +343,79 @@ directamente.
   novedades habría dejado escrito «ya procesado (0 obras)».
 - **Los contadores solo se refrescaban si `inserted > 0`**, así que un refresco
   que solo cambia estados no habría movido los números del mapa.
+
+---
+
+## La época de los movimientos (1 de septiembre de 2026)
+
+`movements.start_year` y `end_year` estaban en la tabla desde `0001_init` y a
+null en las 224 filas: la ingesta nunca pidió esas fechas, porque los
+movimientos entran desde la consulta de obras y esa solo trae su QID y su
+nombre. La tabla de `/es/movimientos` ni siquiera enseñaba la columna, y estaba
+bien quitada — *una columna vacía parece un dato que falta en vez de uno que no
+se trae*.
+
+**El plan escrito aquí era pedir P580 y P582, y se quedaba corto.** Medido antes
+de escribir nada, sobre los 210 movimientos con QID:
+
+| propiedad | cuántos la tienen |
+|---|---|
+| P580 inicio | 55 |
+| P582 fin | 51 |
+| P571 concepción | 61 |
+| P576 disolución | 10 |
+| **alguna de las cuatro** | **108** |
+
+Solo P580/P582 habría llenado un cuarto de la tabla. Wikidata reparte estas
+fechas entre dos pares de propiedades sin mucho criterio: el Impresionismo no
+declara P580 pero sí P571 = 1860. Con las cuatro se llega a 108 de 210.
+
+**La mitad se queda sin fecha, y hay que decirlo.** Pero la cobertura donde se
+mira es otra cosa:
+
+| | con fecha | |
+|---|---|---|
+| los 20 con más obras | 15/20 · 75% | |
+| todos | 108/210 · 51% | cubren el **74%** de las obras con movimiento |
+
+Los 102 sin fecha son movimientos de cola —«Safavid», «Synthetist»—, y salen con
+un guion. Hay además **14 movimientos sin QID**, que no pueden tener fecha por
+este camino.
+
+### Decisiones que tomó el código
+
+- **Cuando Wikidata da varias fechas**, se coge la más temprana para el inicio y
+  la más tardía para el fin. Es lo que significa la época de un movimiento, y
+  sobre todo **es una regla fija**: quedarse con «la que venga primero» es
+  exactamente lo que hace que 5 de cada 300 obras cambien solas en cada refresco,
+  porque SPARQL no garantiza el orden. Ese error no se repite aquí.
+
+- **Los años anteriores a Cristo llegan en negativo** y hay tres: la escultura
+  griega arcaica (−699 a −479), la helenística (desde −322) y el arte romano
+  (−200 a 400). Cortar la fecha por el primer guion se habría comido el signo y
+  convertido el 500 a. C. en el 500 d. C., mil años en silencio. En pantalla se
+  escriben «699–479 a. C.» y «200 a. C.–400», con su sufijo traducido.
+
+- **Los movimientos sin fecha van siempre al final**, se ordene ascendente o
+  descendente. Invertirlos con el resto pondría cien guiones los primeros al
+  pulsar «descendente», y una lista que empieza así parece rota aunque esté bien
+  ordenada.
+
+### Cómo se usa
+
+Va aparte de la ingesta, como `fill-images`, y por lo mismo: son 210 fichas que
+se resuelven en tres consultas, no algo que arrastrar por cada una de las
+269.159 obras.
+
+```bash
+cd packages/ingest
+npm run fill-movement-years              # qué haría, sin tocar nada
+npm run fill-movement-years -- --apply   # lo escribe
+```
+
+**Después de una ingesta que traiga movimientos nuevos, hay que volver a
+pasarlo.** Es idempotente —la segunda pasada dice «0 con fecha nueva, 108 ya la
+tenían igual»— y cuesta segundos.
 
 ---
 
