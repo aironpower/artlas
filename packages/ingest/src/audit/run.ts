@@ -117,6 +117,13 @@ console.log(`Leídas ${artworks.length} obras, ${artists.length} artistas, ${mov
 
 // --- Reglas sin red ---------------------------------------------------------
 
+/*
+ * Las obras a las que esta pasada ha mirado la imagen de verdad. Vacío si no se
+ * pidió `--images`, y por eso el cierre de `image_unfetchable` no toca nada en
+ * una auditoría sin red: no se ha mirado ninguna.
+ */
+const revisadas: number[] = [];
+
 const findings: Finding[] = [];
 const rulesRun = new Set<string>([
   'image_missing', 'image_is_vector', 'institution_missing',
@@ -180,7 +187,9 @@ if (args.images) {
   });
 
   let ok = 0, broken = 0, unknown = 0;
-  const comprobadas: number[] = [];
+  // Se acumulan aquí, en `revisadas`, porque el cierre de hallazgos de más abajo
+  // necesita saber a cuáles se ha mirado la imagen en ESTA pasada.
+  const comprobadas = revisadas;
 
   for (const [id, check] of checks) {
     if (check.verdict === 'unknown') { unknown++; continue; }
@@ -305,15 +314,51 @@ console.log(`\nEscritos ${payload.length} hallazgos.`);
  * humano descarta no vuelve.
  */
 if (!args.limit) {
-  const { data: cerrados, error } = await db.from('audit_findings')
-    .update({ status: 'fixed' })
-    .in('status', ['open', 'confirmed'])
-    .in('rule', [...rulesRun])
-    .lt('last_seen', startedAt)
-    .select('id');
+  /*
+   * `image_unfetchable` se cierra aparte, y solo para las obras que ESTA pasada
+   * ha mirado de verdad.
+   *
+   * El filtro por regla de arriba no basta, y costó ver por qué: una pasada con
+   * `--images` ejecuta la regla, sí, pero sobre una MUESTRA de 10.000 imágenes,
+   * no sobre el catálogo. Todo lo demás que tuviera un hallazgo de imagen rota
+   * quedaba «sin volver a detectar» y se cerraba solo. Y como la cola va por
+   * `image_checked_at` más antiguo, una obra recién comprobada tarda muchísimo
+   * en volver: en la práctica **cada imagen rota se daba por arreglada en la
+   * pasada siguiente**. Se descubrió el 1 de septiembre de 2026 con tres
+   * hallazgos marcados «fixed» de los que dos seguían rotos.
+   *
+   * Las demás reglas sí se evalúan sobre el catálogo entero, así que para ellas
+   * el criterio de siempre es correcto.
+   */
+  const porMuestra = new Set(['image_unfetchable']);
+  const completas = [...rulesRun].filter((r) => !porMuestra.has(r));
 
-  if (error) throw new Error(`cerrando hallazgos: ${error.message}`);
-  if (cerrados?.length) console.log(`Cerrados ${cerrados.length} que ya no se detectan.`);
+  const cerrar = async (reglas: string[], ids?: number[]) => {
+    if (reglas.length === 0 || ids?.length === 0) return 0;
+
+    let q = db.from('audit_findings')
+      .update({ status: 'fixed' })
+      .in('status', ['open', 'confirmed'])
+      .in('rule', reglas)
+      .lt('last_seen', startedAt);
+
+    if (ids) q = q.in('entity_id', ids);
+
+    const { data, error } = await q.select('id');
+    if (error) throw new Error(`cerrando hallazgos: ${error.message}`);
+    return data?.length ?? 0;
+  };
+
+  let cerrados = await cerrar(completas);
+
+  if (rulesRun.has('image_unfetchable')) {
+    // En tandas, que `in` con 10.000 ids no cabe en una URL de PostgREST.
+    for (let i = 0; i < revisadas.length; i += 500) {
+      cerrados += await cerrar(['image_unfetchable'], revisadas.slice(i, i + 500));
+    }
+  }
+
+  if (cerrados) console.log(`Cerrados ${cerrados} que ya no se detectan.`);
 }
 
 console.log();

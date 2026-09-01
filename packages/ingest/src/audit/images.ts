@@ -215,15 +215,35 @@ export async function checkImagesBatched<T extends { id: number; image_url: stri
 
     if (titulos.size === 0) { hechas += lote.length; onProgress?.(hechas, works.length); continue; }
 
-    const consulta = `${COMMONS_API}?${new URLSearchParams({
+    /*
+     * Por POST, y no es capricho.
+     *
+     * Con GET, 50 títulos hacían una URL de 8.238 caracteres y Wikimedia
+     * respondía **414 URI Too Long**: las obras de estampas del Met llevan
+     * títulos de hasta 226 caracteres —«Title Page, The Caricature Magazine by
+     * G[eorge] Cruikshank…»— y cincuenta no caben. El lote entero se quedaba
+     * sin veredicto y volvía a intentarse en cada pasada, para siempre: 101
+     * imágenes atascadas que ninguna pasada podía resolver.
+     *
+     * La API de MediaWiki acepta POST para consultas de lectura y ahí no hay
+     * tope de longitud. Comprobado: el mismo lote que daba 414 devuelve sus 50.
+     */
+    const cuerpo = new URLSearchParams({
       action: 'query', format: 'json', formatversion: '2',
       prop: 'imageinfo', iiprop: 'url|mime', iiurlwidth: '500',
       titles: [...new Set(titulos.values())].join('|'),
-    })}`;
+    });
 
     let json: any;
     try {
-      const res = await fetch(consulta, { headers: { 'User-Agent': userAgent } });
+      const res = await fetch(COMMONS_API, {
+        method: 'POST',
+        headers: {
+          'User-Agent': userAgent,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: cuerpo.toString(),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       json = await res.json();
     } catch (err) {
