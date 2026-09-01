@@ -536,6 +536,92 @@ lo que cambia es que ahora dos llamadas iguales devuelven lo mismo.
 
 ---
 
+## La pantalla de entrar, rehecha (1 de septiembre de 2026)
+
+Empezó por un fallo: **«Enviarme el enlace» no hacía nada**, y la pantalla decía
+que sí. Eran dos cosas encadenadas.
+
+**1. El error se tiraba a la basura.** El código llamaba a Supabase y redirigía
+a «enlace enviado» pasara lo que pasara:
+
+```js
+await db.auth.signInWithOtp({ ... });   // sin mirar si falló
+redirect(`${base}?enviado=1`);
+```
+
+La intención era buena —distinguir «enviado» de «ese correo no existe» convierte
+la pantalla en un comprobador de qué direcciones tienen cuenta— pero de paso
+escondía los fallos reales. El registro estaba **cerrado** en Supabase, cada
+intento moría con `422 signup_disabled`, y por fuera se veía «revisa tu bandeja».
+
+**2. El enlace no llevaba a ninguna parte.** `NEXT_PUBLIC_SITE_URL` decía
+`localhost:3111` y el servidor de desarrollo estaba en el 3000. Una variable
+escrita a mano se desincroniza del puerto real en cuanto alguien levanta el
+servidor en otro sitio; ahora `origenPublico()` la deduce de las cabeceras de la
+propia petición cuando el host es local, y solo fuera de local manda la
+variable.
+
+### La regla que faltaba
+
+**Un fallo del usuario se cuenta en genérico; un fallo nuestro se dice.** Está
+en `deQuienEsElFallo()` y es lo que impide que esto vuelva a pasar:
+
+| | ejemplo | qué se enseña |
+|---|---|---|
+| suyo | contraseña mal, correo sin cuenta | uno genérico, sin decir cuál |
+| suyo, pero corregible | dirección mal escrita | «esa dirección no parece válida» |
+| **nuestro** | registro cerrado, límite de correos, SMTP caído | se dice, y que no es cosa suya |
+
+**El primer intento de esa función tenía un fallo que solo salió al probarla
+contra Supabase de verdad.** Buscaba «email» dentro del código de error, y
+`email_address_invalid` —una dirección mal escrita— caía en «no es cosa tuya».
+Ahora la lista es explícita y lo que no se reconoce cae en «usuario», que no
+promete nada.
+
+### Lo que hay ahora
+
+Tres formas de entrar, en `/entrar`, `/entrar/registro` y `/entrar/recuperar`:
+
+- **Google y GitHub**, arriba del todo. Quien los tiene entra de un clic.
+- **Correo y contraseña.**
+- **Un solo enlace** de «¿has olvidado la contraseña?», que lleva a pedir un
+  correo con enlace a `/entrar/clave`, la pantalla que ya existía.
+
+**El enlace mágico se quitó.** Con contraseña y dos proveedores no aporta, y era
+el que peor funcionaba. El correo se queda para lo que solo él puede hacer:
+confirmar una dirección y recuperar una contraseña.
+
+### Lo que hay que saber para que funcione
+
+Configuración del proyecto Supabase, comprobada el 1 de septiembre:
+
+- **Registro abierto**: sí (lo abrió Manuel esa tarde).
+- **Confirmación de correo**: activada.
+- **Google y GitHub**: **APAGADOS**. Los botones están, pero hasta que se creen
+  las aplicaciones OAuth y se peguen sus credenciales en Supabase, pulsarlos
+  enseña «no se ha podido entrar». Eso sale de `conProveedor`, que detecta el
+  proveedor apagado ANTES de salir de la web.
+- **Redirect URLs**: tienen que incluir `http://localhost:3000/**` y
+  `https://artlas.softie.dev/**`.
+
+**El límite de correos es el problema práctico, y ya se ha visto.** Probando,
+un alta consumió el cupo y la siguiente murió con `429
+over_email_send_rate_limit`. El SMTP de serie de Supabase manda 2-3 correos por
+hora: para usuarios de verdad hace falta uno propio (Resend, Postmark). Hasta
+entonces, el segundo registro de la hora ve «no hemos podido enviar el correo».
+
+### De paso: los cuatro idiomas fantasma de `i18n.ts`
+
+El fichero guarda textos de `it`, `de`, `pt` y `nl` con un comentario que dice
+que están «completos» para poder reactivarlos. **No lo están: les faltan 7
+claves a cada uno**, y nadie se enteró porque `UIKey` sale de `es` y `t()` solo
+indexa `es|en|fr` — TypeScript no mira esos cuatro bloques. Es la misma avería
+que las traducciones de catálogo que se borraron por «congeladas y ya mentira».
+Las claves nuevas de esta pantalla se han puesto solo en los tres que se sirven.
+**Pendiente de decidir si se borran.**
+
+---
+
 ## Las tres ideas que sostienen el diseño
 
 **1. Guardar todo, mostrar lo que se pueda.** `artworks.status` vale

@@ -1,22 +1,62 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { DEFAULT_LANG, isLang } from '@/lib/i18n';
+import { path } from '@/lib/routes';
 
 /**
- * Vuelta del enlace mágico.
+ * La vuelta de todo lo que sale de la web y regresa con una sesión.
  *
- * Aquí SÍ se pueden escribir cookies —es un route handler, no un componente de
- * servidor—, y por eso el intercambio del código por la sesión vive aquí y no
- * en la página: es el único sitio de la app donde se puede dejar la sesión
- * guardada.
+ * Son tres caminos y acaban aquí los tres: confirmar el correo al registrarse,
+ * volver de Google o de GitHub, y el enlace para poner una contraseña nueva.
+ *
+ * Está en un route handler y no en una página porque **es el único sitio de la
+ * app donde se pueden escribir cookies**. Un componente de servidor no puede, y
+ * la sesión es una cookie.
  */
+
+/**
+ * A dónde mandar a alguien después de entrar.
+ *
+ * Solo rutas de esta web. Sin esta comprobación, `?next=https://otrositio` sería
+ * un redirector abierto colgado de nuestro dominio: alguien manda ese enlace,
+ * la víctima ve `artlas.softie.dev` y acaba en otro sitio, ya autenticada.
+ * Se exige una barra inicial y se rechaza `//`, que el navegador interpreta
+ * como dominio externo.
+ */
+function destinoSeguro(crudo: string | null): string {
+  if (!crudo || !crudo.startsWith('/') || crudo.startsWith('//')) return `/${DEFAULT_LANG}`;
+  return crudo;
+}
+
+/** El idioma que llevaba el destino, para no devolver a nadie a otro idioma. */
+function idiomaDe(destino: string) {
+  const primero = destino.split('/')[1] ?? '';
+  return isLang(primero) ? primero : DEFAULT_LANG;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get('code');
-  const destino = searchParams.get('next') ?? '/es/admin';
 
-  if (!code) {
-    return NextResponse.redirect(`${origin}/es/admin/entrar`);
+  const destino = destinoSeguro(searchParams.get('next'));
+  const idioma = idiomaDe(destino);
+  const entrada = `${origin}${path(idioma, 'login')}`;
+
+  /*
+   * El proveedor puede decir que no —alguien pulsa «cancelar» en la pantalla de
+   * Google— y entonces no llega ningún código, sino `error`. Antes esto caía en
+   * el mismo saco que «código inválido» y devolvía a la entrada sin más; sigue
+   * devolviendo, pero contándolo, porque una vuelta silenciosa a la pantalla de
+   * entrar parece que la web se ha estropeado.
+   */
+  const fallo = searchParams.get('error');
+  if (fallo) {
+    return NextResponse.redirect(
+      `${entrada}?error=${fallo === 'access_denied' ? 'cancelado' : 'proveedor'}`,
+    );
   }
+
+  const code = searchParams.get('code');
+  if (!code) return NextResponse.redirect(`${entrada}?error=1`);
 
   const response = NextResponse.redirect(`${origin}${destino}`);
 
@@ -37,10 +77,13 @@ export async function GET(request: NextRequest) {
 
   /*
    * Si el código no vale —caducado, ya usado, manipulado— se vuelve a la
-   * pantalla de entrada sin decir por qué. El detalle solo le sirve a quien
-   * esté probando códigos.
+   * pantalla de entrada sin decir cuál de las tres cosas. El detalle solo le
+   * sirve a quien esté probando códigos.
+   *
+   * Caducado es el caso corriente y no el raro: los enlaces del correo duran
+   * una hora, y a quien abre el correo al día siguiente le pasa esto.
    */
-  if (error) return NextResponse.redirect(`${origin}/es/admin/entrar`);
+  if (error) return NextResponse.redirect(`${entrada}?error=enlace`);
 
   return response;
 }

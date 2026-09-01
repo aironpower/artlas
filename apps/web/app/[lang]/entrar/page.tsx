@@ -1,31 +1,35 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { isLang, t, type Lang } from '@/lib/i18n';
-import { currentUser, supabaseServer } from '@/lib/auth';
+import { currentUser } from '@/lib/auth';
+import { entrar } from '@/lib/cuenta-acciones';
+import { BotonesProveedor } from '@/components/BotonesProveedor';
 import { path } from '@/lib/routes';
 
 export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ lang: string }>;
-  searchParams: Promise<{ enviado?: string; error?: string; volver?: string }>;
+  searchParams: Promise<{ error?: string; volver?: string }>;
 }
 
 /**
- * Entrada, por contraseña o por enlace al correo.
+ * Entrar.
  *
- * Antes vivía en `/admin/entrar` y se llamaba «Panel de revisión», porque el
- * único motivo para identificarse era administrar. Desde que hay favoritos lo
- * hace cualquiera, así que la pantalla es de la web y no del panel.
+ * Tres formas y **ninguna es el enlace mágico al correo**, que estuvo aquí
+ * hasta el 1 de septiembre de 2026 y se quitó por dos motivos. Uno: con
+ * contraseña, Google y GitHub ya no aporta nada, y una pantalla con cuatro
+ * formas de entrar es una pantalla que hay que explicar. Dos: era la que peor
+ * funcionaba, porque depende del límite de correos de Supabase —2 o 3 por
+ * hora con su SMTP de serie—. El correo se queda para lo que solo él puede
+ * hacer: confirmar una dirección y recuperar una contraseña.
  *
- * **Las dos formas conviven a propósito.** El enlace al correo es lo bueno para
- * quien entra dos veces al año: no hay contraseña que recordar ni que perder, y
- * registrarse es lo mismo que entrar. La contraseña es para quien entra a
- * diario —Manuel administrando—, porque esperar un correo cada vez para
- * corregir un título es fricción pura.
+ * Los proveedores van arriba. Quien tiene cuenta de Google entra de un clic, y
+ * ponerlos debajo obliga a leer antes un formulario que no va a rellenar.
  *
- * Nadie tiene contraseña hasta que se la pone desde `/entrar/clave`, ya dentro.
- * Así no hay que inventarle una a nadie ni mandarla por ningún sitio.
+ * Y hay un solo mensaje de error para «ese correo no existe» y «la contraseña
+ * está mal». Dos mensajes distintos convierten esta pantalla en un comprobador
+ * de qué direcciones tienen cuenta.
  */
 export default async function Entrar({ params, searchParams }: Props) {
   const { lang } = await params;
@@ -39,82 +43,50 @@ export default async function Entrar({ params, searchParams }: Props) {
 
   const base = path(idioma, 'login');
 
-  async function conEnlace(formData: FormData) {
-    'use server';
-
-    const email = String(formData.get('email') ?? '').trim();
-    if (!email) return;
-
-    const db = await supabaseServer();
-    await db.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo:
-          `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3111'}/api/auth/callback`,
-      },
-    });
-
-    /*
-     * Se redirige igual haya funcionado o no, y con el mismo mensaje.
-     * Distinguir «correo enviado» de «ese correo no existe» convierte esta
-     * pantalla en un comprobador de quién tiene cuenta.
-     */
-    redirect(`${base}?enviado=1`);
-  }
-
-  async function conClave(formData: FormData) {
-    'use server';
-
-    const email = String(formData.get('email') ?? '').trim();
-    const password = String(formData.get('password') ?? '');
-    if (!email || !password) return;
-
-    const db = await supabaseServer();
-    const { error } = await db.auth.signInWithPassword({ email, password });
-
-    /*
-     * Un solo mensaje para «no existe» y «contraseña mal», por lo mismo de
-     * arriba: dos mensajes distintos dicen qué correos tienen cuenta.
-     */
-    redirect(error ? `${base}?error=1` : (String(formData.get('volver') ?? '') || `/${lang}`));
-  }
-
   return (
     <div className="login">
       <h1>{t(idioma, 'signIn')}</h1>
 
-      {sp.enviado ? (
-        <p className="muted">{t(idioma, 'linkSent')}</p>
-      ) : (
-        <>
-          {sp.error && <p className="aviso aviso-mal">{t(idioma, 'signInFailed')}</p>}
+      {sp.error === 'proveedor' && <p className="aviso aviso-mal">{t(idioma, 'signUpFailed')}</p>}
+      {sp.error === 'cancelado' && <p className="aviso aviso-mal">{t(idioma, 'signInCancelled')}</p>}
+      {sp.error === 'enlace' && <p className="aviso aviso-mal">{t(idioma, 'linkExpired')}</p>}
+      {sp.error === '1' && <p className="aviso aviso-mal">{t(idioma, 'signInFailed')}</p>}
 
-          <form action={conClave}>
-            <input type="email" name="email" required placeholder="tu@correo.com" autoComplete="email" />
-            <input
-              type="password" name="password" required
-              placeholder={t(idioma, 'password')} autoComplete="current-password"
-            />
-            <input type="hidden" name="volver" value={sp.volver ?? ''} />
-            <button className="btn btn-primary" type="submit">{t(idioma, 'signIn')}</button>
-          </form>
+      <BotonesProveedor idioma={idioma} volver={sp.volver} />
 
-          <p className="muted small" style={{ padding: '18px 0 0' }}>{t(idioma, 'orByEmail')}</p>
+      <p className="separador"><span>{t(idioma, 'orByEmail')}</span></p>
 
-          <form action={conEnlace}>
-            <input type="email" name="email" required placeholder="tu@correo.com" autoComplete="email" />
-            <button className="btn" type="submit">{t(idioma, 'sendLink')}</button>
-          </form>
+      <form action={entrar}>
+        <input type="hidden" name="lang" value={idioma} />
+        <input type="hidden" name="volver" value={sp.volver ?? ''} />
+        <input type="email" name="email" required placeholder="tu@correo.com" autoComplete="email" />
+        <input
+          type="password" name="password" required
+          placeholder={t(idioma, 'password')} autoComplete="current-password"
+        />
+        <button className="btn btn-primary" type="submit">{t(idioma, 'signIn')}</button>
+      </form>
 
-          <p className="muted small" style={{ paddingTop: 14 }}>
-            {t(idioma, 'noAccountNote')}
-          </p>
+      {/*
+        * Un solo enlace, y solo para quien ha perdido la contraseña. No es una
+        * segunda forma de entrar puesta de otra manera: si estuviera al mismo
+        * nivel que el botón, la gente lo usaría como atajo para no recordarla
+        * y volveríamos a depender del correo en cada acceso.
+        */}
+      <p className="small" style={{ paddingTop: 14 }}>
+        <Link href={`${base}/recuperar`}>{t(idioma, 'forgotPassword')}</Link>
+      </p>
 
-          <p className="small" style={{ paddingTop: 10 }}>
-            <Link href={`/${idioma}`}>{t(idioma, 'backToMap')}</Link>
-          </p>
-        </>
-      )}
+      <p className="small pie-cuenta">
+        {t(idioma, 'noAccountYet')}{' '}
+        <Link href={`${base}/registro${sp.volver ? `?volver=${encodeURIComponent(sp.volver)}` : ''}`}>
+          {t(idioma, 'createOne')}
+        </Link>
+      </p>
+
+      <p className="small" style={{ paddingTop: 10 }}>
+        <Link className="muted" href={`/${idioma}`}>{t(idioma, 'backToMap')}</Link>
+      </p>
     </div>
   );
 }
