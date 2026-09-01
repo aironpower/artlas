@@ -65,6 +65,40 @@ export function path(lang: Lang, section: Section, rest?: string | number): stri
 }
 
 /**
+ * La misma página, en otro idioma.
+ *
+ *   translatePath('/es/obra/1973', 'en')            ->  '/en/artwork/1973'
+ *   translatePath('/en/museum/prado', 'fr')         ->  '/fr/musee/prado'
+ *   translatePath('/es/admin/catalogo/ciudades', 'en') -> '/en/admin/catalogo/ciudades'
+ *
+ * Cambiar de idioma llevaba a la portada, que es perder el sitio: si estabas
+ * mirando el Guernica en español y querías leerlo en inglés, te devolvía al
+ * mapa del mundo. El enlace decía `/${lang}` a secas aunque el comentario de al
+ * lado prometiera que conservaba la ruta.
+ *
+ * Es una operación de texto y no una consulta porque **los slugs no dependen
+ * del idioma**: `slug` vive en `artworks`, `artists`, `institutions` y
+ * `movements`, y no hay ninguno en las tablas de traducción. Lo único que
+ * cambia es el segmento de sección, que está aquí arriba.
+ *
+ * Un segmento desconocido devuelve la portada del idioma pedido. Es
+ * deliberado: antes que llevar a una URL inventada que dé 404, mejor el sitio
+ * seguro. Pasa, por ejemplo, con una ruta nueva que aún no esté en `SEGMENTS`.
+ */
+export function translatePath(pathname: string, to: Lang): string {
+  const [, , seccion, ...resto] = pathname.split('/');
+  if (!seccion) return `/${to}`;
+
+  const entrada = (Object.entries(SEGMENTS) as [Section, Record<Lang, string>][])
+    .find(([, porIdioma]) => Object.values(porIdioma).includes(seccion));
+
+  if (!entrada) return `/${to}`;
+
+  const cola = resto.filter(Boolean).join('/');
+  return `/${to}/${entrada[1][to]}${cola ? `/${cola}` : ''}`;
+}
+
+/**
  * Pares (idioma, sección) cuyo segmento difiere del de la carpeta y necesitan
  * por tanto una reescritura. Lo consume `next.config.ts`.
  */
