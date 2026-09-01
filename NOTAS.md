@@ -18,7 +18,7 @@ septiembre de 2026, al cerrar:
 | Movimientos con obra | 186 |
 | Hallazgos abiertos | 43 |
 | Migraciones | `0001`–`0037`, todas aplicadas |
-| Espacio | **416 MB** de los 500 |
+| Espacio | **402 MB** de los 500 (eran 416; el refresco del Prado dejó filas muertas que el autovacuum devuelve) |
 
 **Ojo al espacio**: son 416 y no los 374 de por la mañana. No entró nada nuevo
 —lo que engordó fue marcar `image_checked_at` en 135.000 filas de `artworks`, que
@@ -33,7 +33,15 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
    sobre el Prado, la segunda pasada escribió **5 obras de 300**. Queda un cabo
    pequeño y conocido, el de las obras que cambian solas (también más abajo).
 
-2. **Rotar la contraseña de la base**, que pasó por una conversación.
+2. ~~**Rotar la contraseña de la base**~~ **HECHA el 1 de septiembre.** Manuel la
+   cambió desde Supabase y actualizó `DATABASE_URL` en el `.env` de la raíz.
+   Comprobado que la conexión directa sigue funcionando (`migrate --status`:
+   40 aplicadas, 0 pendientes; `promote` en seco). La web no se tocó: solo usa
+   la URL y la clave anónima.
+
+   **Ojo si vuelve a pasar**: el primer intento tras el cambio falló y el
+   segundo funcionó. Es la conexión vieja, no la contraseña. No hay que
+   deshacer nada — reintentar.
 
 3. **Dos cabos de datos, de un rato cada uno:**
    - ~~«The Trojan horse» (obra 87171)~~ **HECHA.** Se le vació `image_url`
