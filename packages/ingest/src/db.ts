@@ -16,6 +16,7 @@ import type {
 } from './types.js';
 import type { Classified } from './audit/gate.js';
 import { slugify } from './normalize.js';
+import { clave, leerExistentes, planificar } from './incremental.js';
 
 /**
  * Convierte los campos localizados de una entidad en filas de traducción.
@@ -297,7 +298,18 @@ export class IdCache {
   }
 }
 
-export interface UpsertResult { inserted: number; updated: number }
+export interface UpsertResult {
+  /** Obras que no estaban en la base. */
+  inserted: number;
+  /** Obras que ya estaban y han necesitado alguna escritura. */
+  updated: number;
+  /** Obras que ya estaban idénticas y no se han tocado. */
+  unchanged: number;
+  /** Qué campo cambió y en cuántas obras: lo que hace legible un refresco. */
+  porCampo: Map<string, number>;
+  /** Un antes y un después por campo, para saber QUÉ cambió y no solo cuánto. */
+  ejemplos: Map<string, { antes: unknown; ahora: unknown }>;
+}
 
 /**
  * Escribe un lote de obras con sus relaciones.
@@ -316,12 +328,16 @@ export async function upsertArtworks(
    */
   classified: Classified[],
 ): Promise<UpsertResult> {
-  if (classified.length === 0) return { inserted: 0, updated: 0 };
+  if (classified.length === 0) {
+    return { inserted: 0, updated: 0, unchanged: 0, porCampo: new Map(), ejemplos: new Map() };
+  }
 
   const works = classified.map((c) => c.work);
 
   // 1. Resolver las claves foráneas (con caché, casi siempre es un hit).
-  const rows = [];
+  // El tipo es explícito porque `planificar` compara estas filas campo a campo
+  // y necesita la clave (source, source_id) garantizada.
+  const rows: (Record<string, unknown> & { source: string; source_id: string })[] = [];
   const movementsByIndex: number[][] = [];
 
   for (const [index, work] of works.entries()) {
@@ -366,16 +382,55 @@ export async function upsertArtworks(
     });
   }
 
-  // 2. Upsert de las obras.
-  const { data, error } = await db
-    .from('artworks')
-    .upsert(rows, { onConflict: 'source,source_id' })
-    .select('id');
-
-  if (error) throw new Error(`lote de obras: ${error.message}`);
+  /*
+   * 2. Qué hay que escribir de verdad.
+   *
+   * Antes se escribía el lote entero siempre. `upsert` es
+   * `insert ... on conflict do update`, y ese update reescribe la fila aunque
+   * no cambie ni un carácter: rehacer el Met eran 14.028 filas reescritas para
+   * nada, cada una dejando su versión vieja muerta en la tabla.
+   *
+   * `planificar` mira lo que ya hay y separa lo nuevo, lo que cambió y lo que
+   * está igual. Cuesta tres lecturas por lote y ahorra hasta 250 escrituras.
+   */
+  const existentes = await leerExistentes(
+    db, rows.map((r) => ({ source: r.source, source_id: r.source_id })),
+  );
+  const plan = planificar(rows, movementsByIndex, existentes);
 
   /*
-   * 3. Traducciones. Van todas en un upsert porque son ~3 filas por obra y
+   * 3. Las obras nuevas y las que cambiaron.
+   *
+   * Se pide `source, source_id` de vuelta y no solo `id`, para casar cada fila
+   * devuelta con la que se envió POR SU CLAVE. Antes se casaban por posición
+   * —`data[i]` con `works[i]`—, y PostgREST no garantiza que un upsert devuelva
+   * las filas en el orden en que se mandaron: el día que no lo hiciera, las
+   * traducciones de un cuadro acabarían colgadas de otro, en silencio y sin
+   * forma de notarlo desde la app.
+   */
+  const idPorIndice = new Map<number, number>(plan.idsConocidos);
+
+  if (plan.filas.length > 0) {
+    const { data, error } = await db
+      .from('artworks')
+      .upsert(plan.filas.map((i) => rows[i]!), { onConflict: 'source,source_id' })
+      .select('id, source, source_id');
+
+    if (error) throw new Error(`lote de obras: ${error.message}`);
+
+    const porClave = new Map<string, number>();
+    for (const fila of (data ?? []) as { id: number; source: string; source_id: string }[]) {
+      porClave.set(clave(fila.source, fila.source_id), Number(fila.id));
+    }
+
+    for (const i of plan.filas) {
+      const id = porClave.get(clave(rows[i]!.source, rows[i]!.source_id));
+      if (id !== undefined) idPorIndice.set(i, id);
+    }
+  }
+
+  /*
+   * 4. Traducciones. Van todas en un upsert porque son ~3 filas por obra y
    *    hacerlo obra a obra multiplicaría por tres los viajes a la red.
    *
    *    SOLO para lo publicado, y esto es lo que hace viable amasar el catálogo
@@ -385,13 +440,17 @@ export async function upsertArtworks(
    *    idiomas serían ~550.000 filas y unos 240 MB de los 500 MB del plan
    *    gratuito, gastados en texto invisible.
    *
-   *    La obra pendiente conserva `artworks.title`, el título neutro, que es
-   *    suficiente para listarla en el panel de revisión. Al promoverla hay que
-   *    hidratarla: es el precio de esta decisión y está asumido.
+   *    A las que cambiaron se suman las de `plan.traducciones`: obras cuya fila
+   *    está igual pero que no tienen textos, porque `promote` las publicó entre
+   *    dos ingestas. Sin ellas se quedarían publicadas y sin traducir.
    */
-  const translations = data.flatMap((row, i) => {
+  const conTextos = [...plan.filas, ...plan.traducciones]
+    .filter((i) => classified[i]?.status === 'published');
+
+  const translations = conTextos.flatMap((i) => {
     const work = works[i];
-    if (!work || classified[i]?.status !== 'published') return [];
+    const artworkId = idPorIndice.get(i);
+    if (!work || artworkId === undefined) return [];
 
     return [...toTranslationRows(
       {
@@ -401,7 +460,7 @@ export async function upsertArtworks(
         genre: work.genres,
       },
       'title',
-    )].map(([lang, fields]) => ({ artwork_id: row.id, lang, ...fields }));
+    )].map(([lang, fields]) => ({ artwork_id: artworkId, lang, ...fields }));
   });
 
   if (translations.length > 0) {
@@ -412,13 +471,22 @@ export async function upsertArtworks(
     if (trError) throw new Error(`traducciones de obras: ${trError.message}`);
   }
 
-  // 4. Relaciones obra <-> movimiento.
-  const links = data.flatMap((row, i) =>
-    (movementsByIndex[i] ?? []).map((movementId) => ({
-      artwork_id: row.id,
+  /*
+   * 5. Relaciones obra <-> movimiento.
+   *
+   * Solo las de las obras cuyo conjunto de movimientos cambió. Los movimientos
+   * no viven en la fila de `artworks`, así que un cuadro al que Wikidata le
+   * añade «Cubismo» tiene la fila idéntica: si no se comparasen aparte, ese
+   * cambio se perdería entero.
+   */
+  const links = plan.enlaces.flatMap((i) => {
+    const artworkId = idPorIndice.get(i);
+    if (artworkId === undefined) return [];
+    return (movementsByIndex[i] ?? []).map((movementId) => ({
+      artwork_id: artworkId,
       movement_id: movementId,
-    })),
-  );
+    }));
+  });
 
   if (links.length > 0) {
     const { error: linkError } = await db
@@ -428,7 +496,19 @@ export async function upsertArtworks(
     if (linkError) throw new Error(`movimientos: ${linkError.message}`);
   }
 
-  return { inserted: data.length, updated: 0 };
+  /*
+   * El resumen, por fin honesto. Antes devolvía `updated: 0` siempre y contaba
+   * como «insertadas» todas las filas del lote, así que la ingesta no podía
+   * decir si su trabajo había cambiado algo. Toda obra que ya estaba o está
+   * igual o se tocó: por eso `updated` sale de la resta y no de otra cuenta.
+   */
+  return {
+    inserted: plan.nuevas,
+    updated: rows.length - plan.nuevas - plan.iguales,
+    unchanged: plan.iguales,
+    porCampo: plan.porCampo,
+    ejemplos: plan.ejemplos,
+  };
 }
 
 /**

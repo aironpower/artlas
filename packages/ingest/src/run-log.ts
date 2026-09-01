@@ -168,6 +168,8 @@ export class RunLog {
             finished_at: new Date().toISOString(),
             fetched: stats.fetched,
             inserted: stats.inserted,
+            updated: stats.updated,
+            unchanged: stats.unchanged,
             published: stats.published,
             pending: stats.pending,
             rejected: stats.rejected,
@@ -211,6 +213,8 @@ export class RunLog {
           .update({
             fetched: stats.fetched,
             inserted: stats.inserted,
+            updated: stats.updated,
+            unchanged: stats.unchanged,
             published: stats.published,
             pending: stats.pending,
             rejected: stats.rejected,

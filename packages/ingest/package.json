@@ -16,6 +16,7 @@
     "peek": "tsx --env-file=../../.env src/peek.ts",
     "audit": "tsx --env-file=../../.env src/audit/run.ts",
     "check-gate": "tsx src/check-gate.ts",
+    "check-incremental": "tsx src/check-incremental.ts",
     "check-perf": "tsx --env-file=../../.env src/check-perf.ts",
     "migrate": "tsx --env-file=../../.env src/migrate.ts",
     "merge-movements": "tsx --env-file=../../.env src/merge-movements.ts",

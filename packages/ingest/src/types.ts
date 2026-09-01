@@ -137,6 +137,13 @@ export interface IngestStats {
   fetched: number;
   inserted: number;
   updated: number;
+  /**
+   * Obras que ya estaban idénticas y no se han tocado.
+   *
+   * Es la cifra que dice si un refresco ha servido de algo. Antes no
+   * existía porque no existía la pregunta: se reescribía todo siempre.
+   */
+  unchanged: number;
   skipped: number;
   errors: number;
   /** Guardadas y visibles en la app. */

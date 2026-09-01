@@ -89,7 +89,25 @@ export async function checkImage(raw: string, userAgent: string): Promise<ImageC
 
     return { verdict: 'ok', detail: type };
   } catch (err) {
-    // Un fallo de red tampoco es una imagen rota: puede ser nuestra conexión.
+    /*
+     * Un fallo de red no es una imagen rota: puede ser nuestra conexión, y por
+     * eso el veredicto es `unknown` y la obra vuelve a la cola.
+     *
+     * Menos cuando el host NO EXISTE. `ENOTFOUND` es el DNS diciendo que ese
+     * nombre no está registrado, y eso no se arregla reintentando: se
+     * reintenta para siempre. Así se quedó «The Trojan horse» (obra 87171),
+     * que apuntaba a `nationalmuseum.iiifhosting.com` —sin el «se»— y era la
+     * ÚNICA de 135.261 sin comprobar nunca, invisible entre un «quedan 1 por
+     * comprobar» que no cambiaba de pasada en pasada.
+     *
+     * Si el que fallara fuera nuestro DNS, fallarían todas a la vez y no una;
+     * el resumen de la pasada lo cantaría. Un `unknown` que no puede dejar de
+     * serlo es un fallo mudo, y aquí no se admiten.
+     */
+    const causa = (err as { cause?: { code?: string } })?.cause?.code;
+    if (causa === 'ENOTFOUND') {
+      return { verdict: 'broken', detail: `el host no existe: ${new URL(url).host}` };
+    }
     return { verdict: 'unknown', detail: `error de red: ${String(err).slice(0, 80)}` };
   }
 }

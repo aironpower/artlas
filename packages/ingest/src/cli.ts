@@ -278,7 +278,9 @@ async function main() {
   console.log(`
 ──────────────────────────────────────────
   Descargadas   ${stats.fetched}
-  Escritas      ${stats.inserted}
+  Nuevas        ${stats.inserted}
+  Actualizadas  ${stats.updated}
+  Sin cambios   ${stats.unchanged}
   Publicadas    ${stats.published}
   Esperando     ${stats.pending}
   No son obras  ${stats.rejected}

@@ -151,10 +151,19 @@ export async function ingestMuseum(
   log: RunLog | null = null,
 ): Promise<MuseumOutcome> {
   const stats: IngestStats = {
-    fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+    fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: 0, errors: 0,
     published: 0, pending: 0, rejected: 0, repaired: 0,
     lostBatches: 0, lostWorks: 0,
   };
+
+  /*
+   * Qué campos cambiaron y en cuántas obras. No va en `stats` porque el
+   * panel guarda cifras en columnas y esto es un desglose; va al resumen
+   * del museo, que es donde se lee la respuesta a «¿ha servido de algo
+   * volver a preguntar?».
+   */
+  const porCampo = new Map<string, number>();
+  const ejemplos = new Map<string, { antes: unknown; ahora: unknown }>();
 
   if (!options.force) {
     const done = await readCheckpoint(museum.qid);
@@ -233,6 +242,13 @@ export async function ingestMuseum(
       const result = await upsertArtworks(db!, cache!, gate.rows);
       stats.inserted += result.inserted;
       stats.updated += result.updated;
+      stats.unchanged += result.unchanged;
+      for (const [campo, n] of result.porCampo) {
+        porCampo.set(campo, (porCampo.get(campo) ?? 0) + n);
+      }
+      for (const [campo, ej] of result.ejemplos) {
+        if (!ejemplos.has(campo)) ejemplos.set(campo, ej);
+      }
     }
 
     batch = [];
@@ -318,7 +334,9 @@ export async function ingestMuseum(
   // ingesta interrumpida la deja vacía del todo pese a tener los datos.
   // Son tres UPDATE de tabla completa por museo (48 veces, no 5.000), que a
   // esta escala cuesta milisegundos.
-  if (db && stats.inserted > 0) {
+  // `updated` cuenta aquí tanto como `inserted`: un refresco que solo cambia
+  // estados no inserta nada y aun así mueve los contadores del mapa.
+  if (db && (stats.inserted > 0 || stats.updated > 0)) {
     try {
       await refreshCounters(db);
     } catch (err) {
@@ -336,7 +354,16 @@ export async function ingestMuseum(
    * habría llevado por delante parte del barrido completo.
    */
   if (!options.dryRun && !abortado) {
-    await writeCheckpoint(museum.qid, stats.inserted, options.minNotability, stats.lostWorks);
+    /*
+     * Las obras que tiene el museo, no las que esta pasada escribió.
+     *
+     * Antes bastaba `stats.inserted`, porque se reescribía todo y esa cifra
+     * era el museo entero. Ahora `inserted` son solo las nuevas: rehacer el
+     * Prado sin novedades habría dejado escrito «ya procesado (0 obras)», que
+     * es falso y encima alarmante.
+     */
+    const delMuseo = stats.inserted + stats.updated + stats.unchanged;
+    await writeCheckpoint(museum.qid, delMuseo, options.minNotability, stats.lostWorks);
   }
 
   if (abortado) {
@@ -361,6 +388,35 @@ export async function ingestMuseum(
     `${enriched > 0 ? `, ${enriched} enriquecidas vía ${museum.api}` : ''}`,
   );
 
+  /*
+   * Qué ha cambiado de verdad. Es la línea que contesta a «¿ha servido de algo
+   * volver a preguntarle a Wikidata?», y sin ella un refresco es indistinguible
+   * de no haberlo hecho: la ingesta diría las mismas cifras en los dos casos.
+   */
+  if (!options.dryRun) {
+    if (stats.inserted === 0 && stats.updated === 0) {
+      console.log(`     nada que cambiar: las ${stats.unchanged} obras ya estaban igual`);
+    } else {
+      console.log(
+        `     ${stats.inserted} nuevas, ${stats.updated} actualizadas, ` +
+        `${stats.unchanged} sin cambios`,
+      );
+
+      const corta = (v: unknown) => {
+        const t = v === null || v === undefined ? 'null' : JSON.stringify(v);
+        return t.length > 42 ? `${t.slice(0, 42)}…` : t;
+      };
+
+      for (const [campo, n] of [...porCampo.entries()].sort((a, b) => b[1] - a[1])) {
+        const ej = ejemplos.get(campo);
+        console.log(
+          `       ${campo.padEnd(18)} ${String(n).padStart(6)} obras` +
+          `${ej ? `   ${corta(ej.antes)} → ${corta(ej.ahora)}` : ''}`,
+        );
+      }
+    }
+  }
+
   return { stats, skipped: false, error: abortado };
 }
 
@@ -381,7 +437,7 @@ export async function ingestAll(
   const dedupe = new DedupeIndex();
 
   const total: IngestStats = {
-    fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+    fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: 0, errors: 0,
     published: 0, pending: 0, rejected: 0, repaired: 0,
     lostBatches: 0, lostWorks: 0,
   };
@@ -409,6 +465,7 @@ export async function ingestAll(
       total.fetched += stats.fetched;
       total.inserted += stats.inserted;
       total.updated += stats.updated;
+      total.unchanged += stats.unchanged;
       total.skipped += stats.skipped;
       total.errors += stats.errors;
       total.published += stats.published;
@@ -442,7 +499,7 @@ export async function ingestAll(
  * vez de un hueco.
  */
 export const SIN_CIFRAS: IngestStats = {
-  fetched: 0, inserted: 0, updated: 0, skipped: 0, errors: 0,
+  fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: 0, errors: 0,
   published: 0, pending: 0, rejected: 0, repaired: 0,
   lostBatches: 0, lostWorks: 0,
 };

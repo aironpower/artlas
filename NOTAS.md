@@ -28,19 +28,27 @@ la tabla). **Comprobarlo antes de meter un museo grande.**
 
 ### Lo que queda por hacer, por orden
 
-1. **Ingesta incremental.** No rehidratar desde Wikidata lo que ya tenemos
-   igual. Es lo que más rinde de cara a seguir metiendo museos, y lo único
-   grande que sigue entero sin empezar.
+1. ~~**Ingesta incremental.**~~ **HECHA el 1 de septiembre**, con su sección
+   propia más abajo. La ingesta ya no reescribe lo que no ha cambiado: probada
+   sobre el Prado, la segunda pasada escribió **5 obras de 300**. Queda un cabo
+   pequeño y conocido, el de las obras que cambian solas (también más abajo).
 
 2. **Rotar la contraseña de la base**, que pasó por una conversación.
 
 3. **Dos cabos de datos, de un rato cada uno:**
-   - «The Trojan horse» (obra 87171) apunta a `nationalmuseum.iiifhosting.com`
-     —sin el «se»— y ese host no existe. Comprobado: el host bueno da 404 para
-     ese identificador y su número de inventario no está en el catálogo del
-     museo. **No tiene imagen buena en ninguna parte**, así que toca vaciarle
-     `image_url` para que vuelva a la cola, como se hizo con las dos que
-     apuntaban a un `.well-known/genid` de Wikidata.
+   - ~~«The Trojan horse» (obra 87171)~~ **medio hecha, y hay que rematarla.**
+     Se le vació `image_url`, comprobado antes que el host no existe (ENOTFOUND)
+     y que el bueno da 404 para ese identificador, también en `info.json`. Falta
+     el paso que la devuelve a la cola: `npm run promote -- --apply`, que dice
+     «1 obra publicada que ya no cumple». Hasta que se ejecute, **queda una obra
+     publicada sin imagen**. El comando se bloqueó por permisos y no se forzó.
+
+     De paso salió el fallo de fondo, ya arreglado: el comprobador de imágenes
+     daba `unknown` a cualquier error de red y devolvía la obra a la cola, así
+     que un host inexistente se reintentaba para siempre sin decir nada. Era la
+     ÚNICA de 135.261 sin comprobar nunca, escondida tras un «quedan 1 por
+     comprobar» que no cambiaba de pasada en pasada. Ahora `ENOTFOUND` es
+     veredicto de imagen rota.
    - **Los movimientos no tienen época**: `start_year` y `end_year` están a null
      en los 186. La ingesta nunca los pidió (P580 y P582). Con eso, la tabla de
      `/es/movimientos` recupera su columna.
@@ -226,6 +234,115 @@ ruta de Windows.
 
 Requiere **Node 22**. Si `node -v` dice 16, es el del PATH de Windows; el bueno
 está en `%APPDATA%/nvm/v22.12.0`.
+
+---
+
+## La ingesta incremental (1 de septiembre de 2026)
+
+**Qué era el problema.** `upsert` en Postgres es `insert ... on conflict do
+update`, y ese `update` reescribe la fila aunque no cambie ni un carácter.
+Rehacer el Met eran 14.028 filas reescritas para no cambiar nada, cada una
+dejando su versión vieja muerta en la tabla. Es la misma enfermedad que infló
+`audit_findings` hasta 121 MB y la misma que hacía morir a los contadores:
+**escribir lo que ya es verdad**.
+
+Y el resumen de la ingesta no podía avisar, porque mentía: `upsertArtworks`
+devolvía `updated: 0` siempre y contaba el lote entero como «insertadas».
+
+**Qué se ha hecho.** `src/incremental.ts` compara lo que se trae con lo que hay
+y decide qué escribir. `upsertArtworks` escribe solo eso. La cifra `unchanged`
+llega hasta el panel (migración `0039`).
+
+**Medido sobre el Prado**, 6.434 obras:
+
+| pasada | nuevas | actualizadas | sin cambios |
+|---|---|---|---|
+| primera, tras cuatro días sin refrescar | 0 | 6.178 | 256 |
+| segunda, sobre 300 obras | 0 | **5** | **295** |
+
+La segunda es la que importa: **de 300 obras se escribieron 5**. Con el código
+viejo habrían sido 300. La primera pasada actualizó casi todo porque los datos
+llevaban desde el 29 de agosto sin tocarse y el propio código de ingesta había
+cambiado por medio; fue una puesta al día de una vez, no un defecto.
+
+### Tres cosas que la comparación tiene que respetar, y por qué
+
+Ninguna es evidente y las tres se descubrieron leyendo el esquema, no probando:
+
+1. **Los campos corregidos a mano.** `locked_fields` los protege con un
+   disparador que devuelve el valor viejo **en silencio**. Compararlos haría que
+   la fila saliera «distinta», se reescribiera, y el disparador la revirtiera
+   otra vez. En cada pasada, para siempre. Hoy no hay ningún campo bloqueado, así
+   que esto no se habría notado hasta el día en que corrigieras algo desde el
+   panel — y entonces habría sido invisible.
+
+2. **Los movimientos no están en la fila**, viven en `artwork_movements`. Si
+   Wikidata le añade «Cubismo» a un cuadro, la fila de `artworks` no cambia y el
+   cambio se perdería entero. Se comparan aparte, y por separado: un cuadro al
+   que solo le cambió el movimiento reescribe sus enlaces, no su fila.
+
+3. **Las traducciones solo existen para lo publicado.** Una obra que `promote`
+   publicó entre dos ingestas tiene la fila que tendría igualmente y ninguna
+   traducción. Saltársela por «igual» la dejaría publicada y sin textos para
+   siempre.
+
+Lo que **no** se compara es `location`, a propósito: es copia de las coordenadas
+del museo, así que cambia por museo y no por obra. Si un museo se mueve, sus
+obras se quedan con la coordenada vieja hasta que alguien lo arregle a mano.
+
+### El cabo que queda: las obras que cambian solas
+
+De las 300 de la segunda pasada, **5 cambiaron sin que nadie las tocara**:
+
+```
+medium        4 obras   "canvas" → "oil paint"
+year_start    1 obra    1670 → 1640
+```
+
+No es un fallo de la comparación: es que esas obras declaran **varios valores**
+para la misma propiedad en Wikidata (dos materiales, dos fechas) y la consulta
+los devuelve sin un orden garantizado, así que la ingesta se queda con uno u
+otro según le toque. Van a ir y venir en cada refresco.
+
+Son un 1,7%, unas 110 obras del Prado y del orden de 4.500 en todo el catálogo:
+un coste conocido y acotado, no una fuga. **Se arregla ordenando los valores
+antes de elegir** —quedarse siempre con el mismo— y es un rato de trabajo, no
+un proyecto. No se ha hecho hoy para no meter un cambio de criterio sin medirlo.
+
+### Cómo se usa
+
+Nada nuevo que aprender: `--force` ya era «rehaz este museo», y ahora es barato.
+
+```bash
+cd packages/ingest
+npm run start -- --museum Q160112 --everything --force   # refrescar un museo
+npm run check-incremental                                # la lógica, sin red ni base
+```
+
+El resumen dice ahora `Nuevas / Actualizadas / Sin cambios`, y debajo qué campo
+cambió, en cuántas obras y **un antes y un después de ejemplo**. Ese ejemplo es
+lo que distingue «Wikidata ha corregido algo» de «lo calculamos distinto cada
+vez», que son problemas muy diferentes; sin él, las 5 obras de arriba habrían
+parecido un fallo de la comparación durante otra hora.
+
+**Ojo con `--limit` en una pasada de prueba**: escribe el checkpoint con las
+obras que haya procesado, así que dejar `--limit 300` marcaría el Prado como
+completo con 300 obras y el siguiente barrido se lo saltaría. Si se usa, hay que
+copiar antes `.checkpoints/<QID>.json` y devolverlo después. Y recuerda que
+`--limit` por `npm run` no llega al script: hay que llamar a `npx tsx src/cli.ts`
+directamente.
+
+### Lo que se arregló por el camino
+
+- **Las traducciones se ataban a su obra por POSICIÓN**, dando por hecho que
+  PostgREST devuelve las filas de un upsert en el mismo orden en que se enviaron.
+  No está garantizado. El día que no lo hiciera, los textos de un cuadro habrían
+  acabado colgados de otro, en silencio. Ahora se casan por su clave.
+- **El checkpoint guardaba `inserted` como «obras del museo»**, que valía cuando
+  se reescribía todo. Ahora `inserted` son solo las nuevas: rehacer el Prado sin
+  novedades habría dejado escrito «ya procesado (0 obras)».
+- **Los contadores solo se refrescaban si `inserted > 0`**, así que un refresco
+  que solo cambia estados no habría movido los números del mapa.
 
 ---
 
