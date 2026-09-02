@@ -256,6 +256,126 @@ está en `%APPDATA%/nvm/v22.12.0`.
 
 ---
 
+## Lo hecho el 2 de septiembre de 2026
+
+Cuatro cosas de Manuel, y la última era un fallo en producción.
+
+### Buscar se caía, y no era «portrait»: era el reloj
+
+`/es/buscar?q=portrait` devolvía «Application error: a server-side exception».
+El rol `anon` corta a los 3 s y la función tardaba más. Medido en producción
+antes de tocar nada:
+
+| búsqueda | tiempo | |
+|---|---|---|
+| portrait | 1,4 s | pasa |
+| saint / woman | 2,3 s | pasa |
+| landscape | 2,9 s | pasa por los pelos |
+| «a» | 3,4 s | **se cae** |
+| «de» | 3,6 s | **se cae** |
+
+Por eso era «a veces»: las búsquedas corrientes vivían a un pelo del límite y
+caían de un lado o de otro según la caché. El `revalidate = 3600` remataba el
+disfraz, porque la primera visita se caía y la siguiente, ya cacheada, iba bien.
+
+**De dónde salía el tiempo**, contando rama por rama con «de»: texto en español
+0 obras, texto en inglés 6.710, artistas 12.832 y **museos 131.081**. Las dos
+ramas de `ilike` no buscan, abren en abanico: «de» está en «Museo del Prado» y
+en «Musée d'Orsay». Luego las ~150.000 candidatas se juntaban con seis
+`left join` de traducciones, se ordenaban enteras y se devolvían 36.
+
+Arreglado en `0041` y `0042` —cada rama trae solo lo que puede salir, los
+`left join` se hacen al final sobre las 36 supervivientes, y un índice de 3 MB
+lleva la notoriedad dentro para no abrir filas de 900 bytes solo para ordenar—.
+Alternando vieja y nueva en las mismas condiciones, mediana de cuatro pasadas:
+
+    portrait   2.718 → 226 ms       art    30.304 → 2.622 ms
+    landscape  1.037 → 129 ms       de     36.037 → 2.737 ms
+    saint        969 → 157 ms       goya      248 → 138 ms
+
+**Y no cambia ni un resultado**, comprobado fila a fila: 19 búsquedas por dos
+idiomas, 16 combinaciones de filtros y paginación, y 8 casos buscados a
+propósito para romperlo. Esos últimos encontraron un fallo de verdad en la
+primera versión: «rembrandt» filtrado por grabado devolvía 13 obras donde había
+37, porque el recorte se quedaba con las más notables —casi todas pinturas— y
+el filtro las barría después. Por eso los filtros van repetidos DENTRO de las
+dos ramas.
+
+**Lo que se probó y se descartó, con la medición delante**: capar también la
+rama de texto. La página 10 de «portrait» perdía las 37, todas empatadas en la
+misma puntuación, porque el tope corta el grupo de empates antes de que la
+notoriedad desempate.
+
+**Lo que sigue sin arreglarse**: «art», «de» y «a» aún se pasan en frío. La
+instancia es compartida y la caché se vacía. Por eso la página ya no lanza:
+`57014` es «no me ha dado tiempo» y se cuenta como tal, con los filtros a la
+vista para acotar. Comprobado en producción: las tres dan el mensaje y
+`portrait` devuelve resultados.
+
+**La lección de método**: `check-perf` medía «goya» y «meninas», las dos
+baratas, y decía «todas dentro del límite» mientras la web devolvía 500. Ahora
+mide siete búsquedas anchas y la página 10. No tumban la comprobación —dependen
+de la caché y eso haría que fallara siempre— pero se cuentan y se dicen.
+
+### Ningún título empieza ya en minúscula
+
+810 obras publicadas se llamaban «portrait of a learned man» o «paysage de
+rivière», y 63 movimientos, «realism». Vienen así de Wikidata, que escribe las
+etiquetas como se escribirían dentro de una frase.
+
+`capitalize` existía desde los movimientos pero solo lo usaban ellos. Ahora
+pasan por él los títulos, artistas y museos en los seis caminos por los que
+llegan. **Se hace al leer y no se corrige en la base**: `artworks.title` es lo
+que dice la fuente y la ingesta lo reescribe en cada pasada, así que una
+corrección guardada duraría hasta el siguiente refresco.
+
+### En un museo, la lista sigue al llegar abajo
+
+Las 3.990 obras del Prado eran 111 clics. Tres decisiones que no se ven:
+
+- **La paginación no se ha quitado**, va dentro del componente nuevo y pintada
+  en el servidor, así que su enlace a la página 2 sigue en el HTML. Solo se
+  esconde cuando el scroll ha demostrado que puede sustituirlo.
+- **La acción devuelve JSX y no JSON.** Con JSON el cliente tendría que volver
+  a pintar las tarjetas y con ellas volver a decidir qué se puede enseñar:
+  habría dos políticas de derechos, la de la primera página y la del scroll.
+- **Todo cae en UNA rejilla.** A 1250 px salen 5 columnas y 36 no es múltiplo
+  de 5: con un `.grid` por lote, la tarjeta 36 se quedaba sola en su fila y el
+  lote siguiente empezaba debajo. Un agujero justo donde el scroll pretende no
+  notarse.
+
+### El mapa: elegir cualquier punto, y ver el radio
+
+El punto se elige con la posición, buscando un sitio o pinchando. **Un solo
+mapa**, el que ya estaba: el panel lo gobierna en vez de añadir un segundo.
+
+El círculo es el radio con el que se pregunta, así que `/api/cerca` distingue:
+sin radio amplía hasta encontrar algo —«cerca de mí» no ha elegido distancia—;
+con radio **no amplía**, porque un círculo de 5 km con obras de 300 sería un
+dibujo que miente.
+
+**Un fallo viejo salió por el camino.** El punto no aparecía nunca, y no era
+del punto: el efecto que crea el mapa tenía `[center, zoom]` como dependencias
+y `center = [6, 46]` es un array nuevo en cada render, así que **el mapa se
+destruía y se reconstruía en cada uno**, llevándose los marcadores. Con la
+portada quieta no se notaba; en cuanto algo de fuera tuvo estado, cada
+pulsación tiraba el mapa.
+
+Dos detalles que salieron de mirar la captura y no el código: el círculo es un
+polígono de 96 lados y no un `circle-layer`, porque el radio de MapLibre se mide
+en píxeles y al alejar dejaría de significar 5 km; y el punto es un anillo y no
+un disco, porque quien busca «Museo del Prado» acaba con el punto encima del
+Prado y con relleno tapaba la chincheta.
+
+### Pendientes que este día deja
+
+- Buscar y la lista de artistas siguen con botón de paginación.
+- El esqueleto de `loading.tsx` no se sustituye nunca sin JavaScript. Es del
+  streaming de Next, no nuestro, pero deja dos rejillas en el HTML.
+- Nominatim es un tercero sin contrato, como las teselas.
+
+---
+
 ## La ingesta incremental (1 de septiembre de 2026)
 
 **Qué era el problema.** `upsert` en Postgres es `insert ... on conflict do
@@ -1694,8 +1814,8 @@ inventario? Medir antes de construir.
 
 ### Lo demás
 
-- **Valoraciones de usuarios.** Tablas y RLS desde `0001`; falta Supabase Auth
-  y la interfaz.
+- **Valoraciones de usuarios.** Tablas y RLS desde `0001`. **Auth ya está**
+  desde el 1 de septiembre: lo único que falta es la interfaz.
 - **La técnica sale como soporte.** Wikidata usa `P186` (material), que da
   "lienzo" en vez de "óleo sobre lienzo".
 - **La licencia concreta de cada fichero de Commons.** Hoy se guarda
@@ -1705,7 +1825,8 @@ inventario? Medir antes de construir.
   segmentos de URL siguen escritos: reactivarlos es añadirlos a `LANGS`,
   `LANG_NAMES`, `SEGMENTS` y `LANGUAGES`, y reingerir. Lo que no cabía en 500 MB
   eran sus traducciones de catálogo.
-- **`apps/web/tsconfig.tsbuildinfo` está versionado** y cambia en cada build.
+- ~~**`apps/web/tsconfig.tsbuildinfo` versionado.**~~ Ya está en `.gitignore`
+  y fuera del índice; comprobado el 2 de septiembre.
 
 ---
 
