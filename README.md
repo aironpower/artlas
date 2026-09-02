@@ -11,9 +11,11 @@ El proyecto son dos aplicaciones sobre una misma base de datos:
 - **Web** (`apps/web`) — la app que usan los visitantes: mapa mundial,
   buscador con filtros, fichas de obra y de museo, "obras cerca de mí".
 
-El estado al cerrar cada sesión y lo pendiente están en [NOTAS.md](NOTAS.md).
+El estado y lo pendiente están en [NOTAS.md](NOTAS.md); la crónica de lo ya
+hecho, con el porqué de cada decisión, en [HISTORIAL.md](HISTORIAL.md).
 
-Estado: **funcionando de punta a punta**, con ~114.000 obras de 48 museos.
+Estado: **funcionando de punta a punta**, con 135.258 obras publicadas de 48
+museos (269.159 en el catálogo, contando las que esperan datos).
 Trilingüe (español, inglés y francés), ingesta verificada contra las APIs
 reales, app web con mapa, buscador, fichas de obra, museo y artista, y un
 panel de revisión para administradores.
