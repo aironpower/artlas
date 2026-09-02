@@ -18,6 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 3 de septiembre de 2026 (noche) | Un pintor, un país: las nacionalidades, agrupadas |
 | 3 de septiembre de 2026 (tarde) | Doce obras al azar; el país del pintor; «36+ obras» y el título del buscador |
 | 3 de septiembre de 2026 | Buscar dentro del radio; lista y orden; «Buscador»; el header en el móvil; las minúsculas |
 | 2 de septiembre de 2026 (noche) | El museo se busca por su nombre; 200 km en el radio del mapa |
@@ -27,6 +28,65 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 3 de septiembre de 2026 (noche): un pintor, un país
+
+«Arregla lo que dices que molesta.» Lo que molestaba: **Rembrandt es «Dutch
+Republic» y Van Gogh «Kingdom of the Netherlands»**, así que para el filtro eran
+dos sitios distintos y no se relacionaban. Los Países Bajos estaban en cinco
+cubos, el Reino Unido en tres y China en cinco dinastías.
+
+La causa está en el dato: la ingesta guarda de P27 la etiqueta inglesa del
+**estado** en que nació la persona, y en Europa eso cambia cada dos siglos.
+
+### No hay regla que lo resuelva
+
+De «Republic of Venice» no se deduce que hoy es Italia: hay que saberlo. Así que
+la migración `0045` es una **tabla de equivalencias repasada a mano** —como los
+museos— y no un algoritmo. 200 filas, el **96% de los artistas** (9.486 de
+9.861). El desplegable pasó de 220 opciones a 66.
+
+De esas 200, 38 las puso la máquina: los nombres que `Intl` reconoce como países
+vigentes. Las otras 162 son estados que ya no existen, y ahí hubo que decidir —
+la línea de los Países Bajos es la de 1581: el norte es NL, el sur BE, así que
+«Southern Netherlands» y «County of Flanders» van a Bélgica.
+
+### Las veinte que no se tocan
+
+Se quedan como están, y **están escritas en la tabla con su motivo** en vez de
+simplemente faltar: una fila ausente parece un olvido; una fila que dice por qué
+es una decisión. La grande es **Habsburg Netherlands, con 264 artistas** —las
+diecisiete provincias, hoy Países Bajos y Bélgica—, donde caen Brueghel y El
+Bosco, que no son del mismo país actual. Afirmarles uno sería inventar.
+
+### Un código obsoleto que se llevaba Alemania
+
+El primer intento sacaba los códigos recorriendo el abecedario y quedándose con
+el primero que diera cada nombre. Salió **«586 DD Alemania»**: `DD` es la RDA,
+da también «Germany» en inglés, y por orden alfabético le ganaba a `DE`. El
+mismo error que ya había con `FX` y Francia, y el apaño de «gana el primero» no
+lo arreglaba: lo tapaba.
+
+La regla buena la da el propio motor: `new Intl.Locale('und-DD').maximize()
+.region` devuelve `DE`. Un código vigente es el que **es su propia forma
+canónica**, y con eso se caen solos DD, FX, SU, YU, AN, CS y compañía. Con la
+corrección, Alemania pasa de 586 a 840 artistas.
+
+### Lo que se enseña y lo que se guarda
+
+En la ficha se lee «Países Bajos», que es lo que agrupa y lo que se pincha, pero
+el estado histórico no se tira: va en el `title` del enlace. Y solo cuando dice
+algo — «Picasso · España» no necesita un `title` que ponga «Spain», que es la
+misma palabra en otro idioma. Eso lo decide `historicalState()`, comparando la
+etiqueta cruda con el nombre inglés del país.
+
+`p_nat` acepta ahora un código o una etiqueta, y no chocan porque ninguna
+etiqueta tiene dos letras.
+
+Comprobado: `/es/artistas?nat=NL` devuelve una lista donde están **Rembrandt y
+Van Gogh a la vez**, que era exactamente lo que no pasaba.
 
 ---
 

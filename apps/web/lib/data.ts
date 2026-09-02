@@ -143,6 +143,8 @@ export interface Artist {
   birth_year: number | null;
   death_year: number | null;
   nationality: string | null;
+  /** El país de hoy al que pertenece esa nacionalidad, si se pudo agrupar. */
+  nationality_code: string | null;
   image_url: string | null;
   artwork_count: number;
 }
@@ -333,7 +335,7 @@ export async function getArtist(lang: Lang, slug: string): Promise<Artist | null
   if (error) throw new Error(`artista ${slug}: ${error.message}`);
   return conInicialMayuscula(
     (data ?? []) as Artist[],
-    ['name', 'description', 'nationality'],
+    ['name', 'description'],
   )[0] ?? null;
 }
 
@@ -641,6 +643,7 @@ export async function listArtists(
 
   const filas = (data ?? []) as {
     slug: string; name: string; nationality: string | null;
+    nationality_code: string | null;
     birth_year: number | null; death_year: number | null;
     artwork_count: number; total: number;
   }[];
@@ -650,6 +653,7 @@ export async function listArtists(
       slug: a.slug,
       name: capitalize(a.name),
       nationality: a.nationality,
+      nationalityCode: a.nationality_code,
       birthYear: a.birth_year,
       deathYear: a.death_year,
       count: a.artwork_count,
@@ -660,12 +664,21 @@ export async function listArtists(
   };
 }
 
-/** Las nacionalidades del catálogo, con su recuento, para el desplegable. */
+/**
+ * Los países del catálogo, con su recuento, para el desplegable.
+ *
+ * Desde la migración 0045 vienen agrupados: «Dutch Republic», «Kingdom of the
+ * Netherlands» y «Netherlands» son una sola fila con el código `NL`. Lo que no
+ * se pudo agrupar —«Habsburg Netherlands», que hoy son dos países— sale con su
+ * etiqueta cruda y sin código, y la pantalla lo enseña tal cual.
+ *
+ * `value` es lo que viaja en la URL en los dos casos.
+ */
 export async function listNationalities() {
   const { data, error } = await db().rpc('list_nationalities');
   if (error) throw new Error(`nacionalidades: ${error.message}`);
 
-  return (data ?? []) as { nationality: string; artists: number }[];
+  return (data ?? []) as { value: string; country_code: string | null; artists: number }[];
 }
 
 /**

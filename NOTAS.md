@@ -28,7 +28,7 @@ directa de estados):
 | Museos | **48 de 48**, en 34 ciudades |
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
-| Migraciones | `0001`–`0044` · **44 aplicadas, 0 pendientes** |
+| Migraciones | `0001`–`0045` · **45 aplicadas, 0 pendientes** |
 | Espacio | **406,5 MB** de los 500 del plan gratuito (81,3%) |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
@@ -127,22 +127,22 @@ primeras tocan **espacio**, y quedan ~93 MB.
 - **¿Puede registrarse cualquiera?** Hoy sí: con un correo válido se crea perfil
   `viewer`, que no da ningún permiso. Si no se quiere, se cierra el registro
   desde Supabase.
-- **Las nacionalidades, partidas en trozos.** Desde el 3 de septiembre se
-  traducen las que son países vigentes —38 de 220, el **62% de los artistas**,
-  con los datos que ya trae `Intl`— y el resto se queda como lo dice Wikidata:
-  «Dutch Republic», «Republic of Venice», «Qing dynasty». Traducir esas haría
-  falta una tabla a mano, y ahí no hay respuesta buena: «República de Venecia»
-  no es Italia.
+- **Las nacionalidades, ya agrupadas** (3 de septiembre). La tabla
+  `nationality_country` dice a qué país de hoy pertenece cada etiqueta de
+  Wikidata: 200 filas repasadas a mano que cubren el **96% de los artistas**.
+  Rembrandt y Van Gogh ya salen los dos en «Países Bajos». El desplegable pasó
+  de 220 opciones a 66.
 
-  Lo que sí molesta de verdad es que **un mismo sitio esté en cinco cubos**:
-  Dutch Republic (532), Habsburg Netherlands (264), Southern Netherlands (155),
-  Kingdom of the Netherlands (145) y Netherlands (102) son, para quien busca,
-  «Países Bajos». Igual con el Reino Unido (3) y con China (dinastías). Juntarlos
-  es una decisión histórica, no técnica, y por eso no se ha tomado sola.
+  **Lo que queda sin agrupar son 20 etiquetas, y está decidido así**: cada una
+  abarcaba lo que hoy son varios países. La grande es **Habsburg Netherlands
+  (264 artistas)** —las diecisiete provincias, hoy NL y BE—, donde caen Brueghel
+  y El Bosco. Están en la tabla con `country_code` nulo y su motivo escrito en
+  `note`, para que se vea que es una decisión y no un olvido.
 
-  La raíz: la ingesta guarda de P27 solo la etiqueta inglesa, sin QID ni código
-  de país. Con el QID guardado, traducir y agrupar dejaría de ser adivinar — pero
-  son 21.619 artistas que habría que repasar.
+  Si se quiere resolver, no es con una regla mejor: es mirando quién es cada
+  uno, o guardando el QID de P27 en la ingesta y volviendo a pasar por los
+  21.619 artistas.
+
 - **El buscador no filtra por museo concreto**; por ciudad sí.
 - **El SMTP de serie de Supabase manda 2-3 correos por hora.** Para usuarios de
   verdad hace falta uno propio (Resend, Postmark); hasta entonces, el segundo

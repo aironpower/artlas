@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isLang, t, formatNumber, formatYears, countryName, type Lang } from '@/lib/i18n';
+import {
+  isLang, t, formatNumber, formatYears, countryName, historicalState, type Lang,
+} from '@/lib/i18n';
 import { listArtists, listNationalities } from '@/lib/data';
 import { path } from '@/lib/routes';
 import { Ordenable } from '@/components/Ordenable';
@@ -128,10 +130,11 @@ export default async function Artistas({ params, searchParams }: Props) {
         <select name="nat" defaultValue={nat ?? ''} aria-label={t(idioma, 'colNationality')}>
           <option value="">{t(idioma, 'colNationality')}: —</option>
           {nacionalidades.map((n) => (
-            /* Traducido solo en la etiqueta: el `value` viaja a la consulta y
-             * tiene que seguir siendo el texto exacto de Wikidata. */
-            <option key={n.nationality} value={n.nationality}>
-              {countryName(idioma, n.nationality)} ({n.artists})
+            /* Traducido solo en la etiqueta. El `value` viaja a la consulta:
+             * es el código del país cuando el grupo existe, y la etiqueta cruda
+             * de Wikidata cuando no se pudo agrupar. */
+            <option key={n.value} value={n.value}>
+              {countryName(idioma, n.country_code, n.value)} ({n.artists})
             </option>
           ))}
         </select>
@@ -172,8 +175,13 @@ export default async function Artistas({ params, searchParams }: Props) {
               {artistas.map((a) => (
                 <tr key={a.slug}>
                   <td><Link href={path(idioma, 'artist', a.slug)}>{a.name}</Link></td>
-                  <td className="muted col-opcional">
-                    {a.nationality ? countryName(idioma, a.nationality) : '—'}
+                  <td
+                    className="muted col-opcional"
+                    title={historicalState(a.nationalityCode, a.nationality)}
+                  >
+                    {a.nationality
+                      ? countryName(idioma, a.nationalityCode, a.nationality)
+                      : '—'}
                   </td>
                   <td className="muted">{formatYears(idioma, a.birthYear, a.deathYear) ?? '—'}</td>
                   <td className="num">{formatNumber(idioma, a.count)}</td>

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isLang, t, formatNumber, countryName } from '@/lib/i18n';
+import { isLang, t, formatNumber, countryName, historicalState } from '@/lib/i18n';
 import { getArtist, artworksByArtist } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtistMap from '@/components/ArtistMap';
@@ -94,8 +94,10 @@ export default async function ArtistPage({ params, searchParams }: Props) {
             */}
           {artist.nationality && (
             <> · <Link
-              href={`${path(lang, 'artists')}?nat=${encodeURIComponent(artist.nationality)}`}
-            >{countryName(lang, artist.nationality)}</Link></>
+              href={`${path(lang, 'artists')}?nat=${
+                encodeURIComponent(artist.nationality_code ?? artist.nationality)}`}
+              title={historicalState(artist.nationality_code, artist.nationality)}
+            >{countryName(lang, artist.nationality_code, artist.nationality)}</Link></>
           )}
         </p>
         {artist.description && <p className="muted">{artist.description}</p>}

@@ -903,59 +903,42 @@ export function t(lang: Lang, key: UIKey): string {
  * un `initcap` destrozaría "pintura del Siglo de oro neerlandés" y "Les Nabis".
  */
 /*
- * El país de origen de un artista, dicho en el idioma de quien mira.
+ * El país de un artista, dicho en el idioma de quien mira.
  *
  * `artists.nationality` guarda la etiqueta que da Wikidata para P27, en inglés
- * y sin código de país: «France», «Dutch Republic», «Qing dynasty». Los museos
- * sí traducen su país, porque la ingesta les guarda `country_code` y una fila
- * por idioma; los artistas no tienen ni una cosa ni la otra.
+ * y del ESTADO en que nació la persona: «Dutch Republic», «Kingdom of Prussia»,
+ * «Qing dynasty». La migración 0045 tiene la tabla que dice a qué país de hoy
+ * pertenece cada una —200 filas repasadas a mano— y de ahí viene el código.
  *
- * La traducción sale de los datos que el propio motor ya trae —`Intl`— y no de
- * una tabla escrita a mano que habría que mantener: se recorren los códigos ISO
- * de región, se pregunta cómo se llama cada uno EN INGLÉS, y eso da un
- * diccionario «nombre inglés → código» con el que traducir al idioma que sea.
+ * Con código, el nombre lo pone `Intl`, que ya lo sabe en los tres idiomas y en
+ * los cuatro que no están. Sin código —las veinte etiquetas que abarcaban lo
+ * que hoy son varios países— se deja lo que dice Wikidata, que es la respuesta
+ * verdadera aunque esté en inglés.
  *
- * Medido sobre las 220 nacionalidades del catálogo: reconoce 38, que son el
- * **62% de los artistas**. El resto son estados que ya no existen —«Republic of
- * Venice», «Habsburg Netherlands», «Russian Empire»— y ahí se deja lo que dice
- * Wikidata, que es la respuesta verdadera aunque esté en inglés. Inventarles un
- * nombre en español sería peor que no traducirlos.
- *
- * OJO: esto es solo para ENSEÑAR. El filtro de la lista de artistas compara
- * contra el texto exacto de la base, así que el valor que viaja en la URL tiene
- * que seguir siendo el de Wikidata.
+ * OJO: esto es solo para ENSEÑAR. En la URL del filtro viaja `value`, que es el
+ * código cuando lo hay y la etiqueta cuando no.
  */
-let porNombre: Map<string, string> | null = null;
-
-function codigosDePais(): Map<string, string> {
-  if (porNombre) return porNombre;
-  porNombre = new Map();
-
-  const en = new Intl.DisplayNames(['en'], { type: 'region' });
-  for (let a = 65; a <= 90; a++) {
-    for (let b = 65; b <= 90; b++) {
-      const code = String.fromCharCode(a, b);
-      let nombre: string | undefined;
-      try { nombre = en.of(code); } catch { continue; }
-      // El primero gana: «France» sale de FR y también del obsoleto FX, y el
-      // que queremos es el vigente, que llega antes por orden alfabético.
-      if (nombre && nombre !== code && !porNombre.has(nombre.toLowerCase())) {
-        porNombre.set(nombre.toLowerCase(), code);
-      }
-    }
-  }
-  return porNombre;
-}
-
-export function countryName(lang: Lang, etiqueta: string): string {
-  const code = codigosDePais().get(etiqueta.toLowerCase());
-  if (!code) return capitalize(etiqueta);
+export function countryName(lang: Lang, code: string | null, raw: string): string {
+  if (!code) return capitalize(raw);
 
   try {
-    return new Intl.DisplayNames([lang], { type: 'region' }).of(code) ?? capitalize(etiqueta);
+    return new Intl.DisplayNames([lang], { type: 'region' }).of(code) ?? capitalize(raw);
   } catch {
-    return capitalize(etiqueta);
+    return capitalize(raw);
   }
+}
+
+/**
+ * El estado histórico, cuando dice algo que el país no dice.
+ *
+ * «Rembrandt · Países Bajos» esconde que era de la República de las Provincias
+ * Unidas, y eso merece guardarse a un palmo del ratón. Pero «Picasso · España
+ * (Spain)» no añade nada: es la misma palabra en otro idioma. Así que solo se
+ * devuelve la etiqueta cruda cuando NO es el nombre inglés de ese mismo país.
+ */
+export function historicalState(code: string | null, raw: string | null): string | undefined {
+  if (!code || !raw) return undefined;
+  return countryName('en', code, raw) === raw ? undefined : raw;
 }
 
 export function capitalize(value: string): string {
