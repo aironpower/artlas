@@ -5,6 +5,7 @@ import { isLang, formatNumber, type Lang } from '@/lib/i18n';
 import { requireAdmin, supabaseServer } from '@/lib/auth';
 import { path } from '@/lib/routes';
 import AutoRefresh from '@/components/AutoRefresh';
+import BuscarMuseo from '@/components/BuscarMuseo';
 
 /*
  * Nunca en caché, y aquí no es una preferencia: la pantalla existe para
@@ -204,11 +205,10 @@ export default async function IngestaPage({ params }: Props) {
         <ul className="findings">
           <Encargo
             titulo="Añadir o actualizar un museo"
-            pie="El identificador de Wikidata del museo, como Q160112 para el Prado. Si no lo tenemos todavía, se añade."
+            pie="Búscalo por su nombre. Si no lo tenemos todavía, se añade; si ya está, se actualiza."
             kind="ingest" accion={encargar}
           >
-            <input className="campo" name="museum" placeholder="Q160112" required
-              pattern="Q[1-9][0-9]*" title="Un QID: la Q y números" />
+            <BuscarMuseo lang={idioma} />
             <Casilla name="everything" etiqueta="todo lo que exista" />
             <Casilla name="force" etiqueta="rehacer aunque esté hecho" />
           </Encargo>

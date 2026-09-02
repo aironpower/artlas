@@ -42,6 +42,7 @@ const RADIOS = [
   { m: 5_000, zoom: 11 },
   { m: 15_000, zoom: 9.5 },
   { m: 50_000, zoom: 8 },
+  { m: 200_000, zoom: 6 },
 ] as const;
 
 type Estado =

@@ -53,21 +53,19 @@ hueco libre del tamaño de la tabla.
 
 ### 1. La ingesta de museos, delegable
 
-**Los dos huecos de código se cerraron el 2 de septiembre** —desde el panel se
-puede añadir un museo que no esté en la semilla, y la pantalla dice si hay
-trabajador escuchando—. Tienen su sección en el historial.
+**Tres huecos cerrados el 2 de septiembre** —desde el panel se puede añadir un
+museo que no esté en la semilla, la pantalla dice si hay trabajador escuchando,
+y el museo se busca por su nombre en vez de teclear el QID—. Tienen su sección
+en el historial.
 
-**Lo que falta para poder delegarlo de verdad no es código:**
+**Lo que falta para poder delegarlo de verdad ya no es teclear identificadores:**
 
 - **Un museo nuevo no está hecho cuando acaba la ingesta**, sino cuando alguien
   repasa su ficha en `/es/admin/catalogo` —ciudad, país, nombre en es/en/fr—.
   Hoy eso es algo que sabe Manuel y no dice ninguna pantalla. Para delegarlo
   tiene que ser una lista guiada: qué mirar, en qué orden, y cómo se marca un
-  museo como revisado.
-- **Hay que teclear el QID.** Quien no sepa qué es Wikidata no sabe de dónde
-  sacarlo. Buscar el museo por su nombre desde el propio formulario —lo que ya
-  hace `build-seed.ts` con `wbsearchentities`— quitaría el único paso que
-  todavía pide saber cómo funciona esto por dentro.
+  museo como revisado. El buscador ya avisa de que hay que hacerlo («museo
+  nuevo · hay que repasar su ficha a mano»), pero avisar no es guiar.
 - **Un rol.** El panel es `requireAdmin` a secas: delegar hoy es hacer
   administrador a otra persona, con todo lo que eso abre.
 

@@ -404,6 +404,63 @@ option::checkmark { display: none; }
 .campo:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /*
+ * Buscar el museo por su nombre, dentro del formulario del encargo.
+ *
+ * Ocupa toda la anchura del formulario (`flex-basis: 100%`) porque el nombre y
+ * la descripción de Wikidata —«museo de arte en Madrid, España»— no caben al
+ * lado de un botón, y partidos en dos líneas de cuatro palabras no se leen. El
+ * tope de anchura es para que un candidato con descripción larga no empuje la
+ * columna de la izquierda, que es la que explica el trabajo.
+ */
+/*
+ * Ocupa la fila entera del formulario y limita el ANCHO POR DENTRO, no por
+ * fuera. Con `max-width` en el propio elemento flexible la fila no se llenaba,
+ * y las casillas del encargo —«todo lo que exista»— se colaban al lado de la
+ * lista de candidatos en vez de bajar a la línea siguiente.
+ */
+.buscar-museo {
+  flex-basis: 100%;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+/*
+ * `rem` y no `em`: el aviso y el desplegable van en letra pequeña, y un `30em`
+ * suyo medía 384 px mientras la lista medía 480. Se veían escalonados sin que
+ * nada en el CSS lo dijera.
+ */
+.buscar-museo > * { width: 100%; max-width: 30rem; }
+.buscar-museo-caja { display: flex; gap: 8px; align-items: center; }
+.buscar-museo .campo { width: 12em; }
+.buscar-museo-aviso { margin: 6px 0 0; }
+
+.buscar-museo-lista { list-style: none; margin: 6px 0 0; padding: 0; }
+.buscar-museo-lista li + li { border-top: 1px solid var(--border); }
+.buscar-museo-lista button {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 7px 9px; font: inherit; font-size: 0.85rem;
+  background: var(--surface); color: var(--text);
+  border: 0; border-radius: 7px;
+}
+.buscar-museo-lista button:hover,
+.buscar-museo-lista button:focus-visible { background: var(--accent-soft); }
+.buscar-museo-nombre { font-weight: 600; }
+.buscar-museo-desc { display: block; }
+.buscar-museo-lista .sev { margin-left: 8px; }
+
+/* El desplegable de los que Wikidata no sitúa: un enlace, no un botón más. */
+.buscar-museo-otros {
+  display: block; margin: 6px 0 0; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 0.8rem; color: var(--muted);
+  text-align: left;
+}
+.buscar-museo-otros:hover { color: var(--text); }
+
+.buscar-museo-elegido {
+  margin: 6px 0 0; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+}
+
+/*
  * La salida del proceso, en vivo. Con scroll propio y no en el flujo de la
  * página: son las últimas líneas de algo que puede escupir miles, y sin el
  * `overflow` una línea larga empujaría el ancho de toda la pantalla.

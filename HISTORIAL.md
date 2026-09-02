@@ -18,12 +18,101 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 2 de septiembre de 2026 (noche) | El museo se busca por su nombre; 200 km en el radio del mapa |
 | 2 de septiembre de 2026 (tarde) | Añadir un museo desde el panel; el trabajador dice si está escuchando; NOTAS partido en dos |
 | 2 de septiembre de 2026 (mañana) | Buscar se caía; los títulos en minúscula; el scroll en la ficha de museo; elegir punto en el mapa |
 | 1 de septiembre de 2026 | Ingesta incremental; la época de los movimientos; «cerca de mí»; la pantalla de entrar; las imágenes; llegar a las páginas; cuentas y favoritos |
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 2 de septiembre de 2026 (noche): buscar el museo por su nombre
+
+Quedaba un paso del formulario que seguía pidiendo saber cómo funciona esto por
+dentro: **teclear el QID**. Quien no sepa qué es Wikidata no sabe de dónde
+sacarlo, así que «añade el museo tal» no se podía pedir a nadie sin explicarle
+antes qué es una Q y unos números.
+
+Ahora la misma caja acepta las dos cosas: un nombre o un QID. Es literalmente el
+mismo campo `museum` —no hay campo oculto ni segundo formulario—, así que el
+`required` y el `pattern` del navegador siguen siendo la red: un nombre a medio
+resolver no se puede encargar. Al elegir un candidato, el valor pasa a ser su
+QID.
+
+### `wbsearchentities` busca por etiqueta, no por tipo
+
+Y ahí estaba el problema de verdad. Escribir «Museo del Prado» devolvía el museo
+**y detrás seis ediciones del libro de Alfonso Pérez Sánchez**, todas llamadas
+igual. «xyzzy museo inventado» acababa ofreciendo un editor de texto. Una lista
+así es peor que ninguna: le pide elegir precisamente a quien no puede
+distinguir, que es la persona para la que se hizo esto.
+
+El filtro es **tener coordenadas**, y no es un rodeo para decir «es un museo»:
+es exactamente lo que el catálogo necesita de él. Un museo sin punto no puede
+ser una chincheta del mapa.
+
+Se midieron las dos formas de averiguarlo antes de elegir:
+
+| | Bytes | Tiempo |
+|---|---|---|
+| `wbgetentities&props=claims` de 7 candidatos | 205 KB | 1,5 s |
+| `action=query&prop=coordinates` de los mismos 7 | **473 B** | **0,28 s** |
+
+Contestan lo mismo. Se usa la segunda.
+
+### Lo que enseñó medirlo: el Museo Picasso Málaga
+
+La primera versión **tiraba** los candidatos sin coordenadas, y al probarla con
+«Musée Picasso Paris» faltaba uno de la lista: el **Museo Picasso Málaga**, que
+es un museo de verdad al que Wikidata no le ha puesto coordenadas. Un buscador
+que esconde el museo que buscas es peor que uno con ruido, y esconderlo lo
+dejaba además inalcanzable desde el panel — justo lo que esto venía a arreglar.
+
+Así que no se tiran: se apartan detrás de un «▸ 1 resultado que Wikidata no
+sitúa en el mapa», que se abre de un clic. Ahí caen dos cosas que desde fuera no
+se distinguen —el ruido y el museo mal descrito—, y decidir cuál es cuál es de
+quien mira, no del filtro. Al elegir uno, se avisa: «sin coordenadas · no saldrá
+en el mapa».
+
+Un QID pegado a mano no se filtra, solo se marca. Quien escribe una Q y unos
+números sabe lo que pega.
+
+### Lo que se dice antes de encargar, y por qué
+
+Cada candidato dice si **ya lo tenemos**, y el elegido enseña cuántas obras
+tiene y un enlace a su ficha. Encargar un museo que ya está y encargar uno nuevo
+son dos cosas distintas —una actualiza, la otra ocupa espacio del que quedan
+~98 MB— y hasta ahora se veían igual: una caja con una Q y unos números.
+
+Y el QID se comprueba **antes**, con la API de entidades, no con SPARQL: por lo
+que costó averiguar esa misma tarde, WDQS con un QID inventado no falla rápido,
+reintenta y muere en medio minuto con «504 Gateway Timeout». Ahora una Q mal
+copiada se ve al momento en la caja en vez de después de una ingesta fallida.
+
+### Tres cosas que solo aparecieron al abrir el navegador
+
+1. **Dos servidores de desarrollo compartiendo `.next`.** Se arrancó uno en el
+   3111 sin ver que ya había otro en el 3000, los dos sobre `apps/web/.next`, y
+   el panel empezó a devolver 404 con «missing required error components». Se
+   perdió un rato buscando el fallo en el código de la sesión, que estaba bien.
+   **Antes de arrancar un `next dev`, mirar si ya hay uno.**
+2. **`em` no es `rem`.** El aviso y el desplegable van en letra pequeña, así que
+   su `max-width: 30em` medía 384 px mientras la lista medía 480: se veían
+   escalonados sin que nada en el CSS lo dijera.
+3. **`max-width` en el propio elemento flexible no llena la fila**, y las
+   casillas del encargo —«todo lo que exista»— se colaban al lado de la lista de
+   candidatos en vez de bajar a la línea siguiente. El ancho se limita por
+   dentro.
+
+### 200 km en el radio del mapa
+
+Pedido de Manuel. `RADIOS` va con su zoom a propósito —elegir 200 km y quedarse
+en el zoom de 1 km deja el círculo fuera de la pantalla, y entonces el mapa deja
+de explicar lo que se está preguntando—, así que 200 km entra con zoom 6.
+Comprobado sobre Barcelona: el círculo cabe entero y devuelve 24 obras. El
+servidor ya aceptaba hasta 1.000 km, así que no hubo que tocarlo.
 
 ---
 
