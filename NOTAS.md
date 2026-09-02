@@ -114,11 +114,9 @@ primeras tocan **espacio**, y quedan ~93 MB.
   Una de verdad sale del extracto de Wikipedia, y **hay que medir antes de
   prometerlo**: 21.619 artistas × un párrafo × tres idiomas es espacio, y solo
   11.426 tienen obra publicada. Empezar por esos.
-- **País de origen del pintor, y buscar por él.** Media pieza ya existe: la
-  lista de artistas filtra por `nationality` y el desplegable lleva el recuento.
-  Falta enseñarlo en la ficha del artista y que se pueda pinchar. Ojo con lo
-  que ya está dicho más abajo: las nacionalidades vienen en inglés y muchas son
-  estados que no existen.
+- **~~País de origen del pintor~~**: hecho el 3 de septiembre. Se enseña en su
+  ficha y lleva a la lista filtrada. Lo que queda de ahí es dato, no pantalla, y
+  está abajo con las decisiones.
 - **Artistas relacionados** por país, época, museo o movimiento. Es lo último de
   la lista a propósito: las cuatro relaciones existen ya como columnas, así que
   el trabajo no es tenerlas sino elegir cuál manda cuando varias coinciden, y
@@ -129,8 +127,22 @@ primeras tocan **espacio**, y quedan ~93 MB.
 - **¿Puede registrarse cualquiera?** Hoy sí: con un correo válido se crea perfil
   `viewer`, que no da ningún permiso. Si no se quiere, se cierra el registro
   desde Supabase.
-- **Las nacionalidades** salen de Wikidata en inglés y sin traducir —«Tang
-  dynasty», «Kingdom of Pergamon»—, y muchas son estados que ya no existen.
+- **Las nacionalidades, partidas en trozos.** Desde el 3 de septiembre se
+  traducen las que son países vigentes —38 de 220, el **62% de los artistas**,
+  con los datos que ya trae `Intl`— y el resto se queda como lo dice Wikidata:
+  «Dutch Republic», «Republic of Venice», «Qing dynasty». Traducir esas haría
+  falta una tabla a mano, y ahí no hay respuesta buena: «República de Venecia»
+  no es Italia.
+
+  Lo que sí molesta de verdad es que **un mismo sitio esté en cinco cubos**:
+  Dutch Republic (532), Habsburg Netherlands (264), Southern Netherlands (155),
+  Kingdom of the Netherlands (145) y Netherlands (102) son, para quien busca,
+  «Países Bajos». Igual con el Reino Unido (3) y con China (dinastías). Juntarlos
+  es una decisión histórica, no técnica, y por eso no se ha tomado sola.
+
+  La raíz: la ingesta guarda de P27 solo la etiqueta inglesa, sin QID ni código
+  de país. Con el QID guardado, traducir y agrupar dejaría de ser adivinar — pero
+  son 21.619 artistas que habría que repasar.
 - **El buscador no filtra por museo concreto**; por ciudad sí.
 - **El SMTP de serie de Supabase manda 2-3 correos por hora.** Para usuarios de
   verdad hace falta uno propio (Resend, Postmark); hasta entonces, el segundo

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { isLang, t, formatNumber } from '@/lib/i18n';
+import Link from 'next/link';
+import { isLang, t, formatNumber, countryName } from '@/lib/i18n';
 import { getArtist, artworksByArtist } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtistMap from '@/components/ArtistMap';
@@ -79,6 +80,22 @@ export default async function ArtistPage({ params, searchParams }: Props) {
           {formatNumber(lang, artist.artwork_count)} {t(lang, 'artworks')}
           {museums.size > 0 && (
             <> · {formatNumber(lang, museums.size)} {t(lang, 'museums')}</>
+          )}
+          {/*
+            * El país de origen, y se pincha.
+            *
+            * La ficha lo tenía en los datos y no lo enseñaba, así que la única
+            * manera de saber de dónde era un pintor era volver a la lista de
+            * artistas y buscarlo. Enlaza a esa lista ya filtrada, que es la
+            * pregunta que uno se hace al leerlo: «¿y quién más de ahí?».
+            *
+            * En la URL viaja el texto EXACTO de Wikidata, que es contra lo que
+            * compara el filtro; lo traducido es solo lo que se lee.
+            */}
+          {artist.nationality && (
+            <> · <Link
+              href={`${path(lang, 'artists')}?nat=${encodeURIComponent(artist.nationality)}`}
+            >{countryName(lang, artist.nationality)}</Link></>
           )}
         </p>
         {artist.description && <p className="muted">{artist.description}</p>}

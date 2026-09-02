@@ -44,6 +44,8 @@ const UI = {
     worksAround: 'Obras alrededor de este punto',
     clearPoint: 'Quitar el punto',
     nothingInRadius: 'Nada en ese radio. Prueba a ampliarlo.',
+    allArtworks: 'Todas las obras',
+    randomWorks: 'Doce obras al azar',
     filterThese: 'Filtrar entre estas…',
     noMatchHere: 'Ninguna de estas obras coincide.',
     viewGrid: 'Rejilla',
@@ -170,6 +172,8 @@ const UI = {
     worksAround: 'Works around this point',
     clearPoint: 'Clear the point',
     nothingInRadius: 'Nothing within that radius. Try widening it.',
+    allArtworks: 'All works',
+    randomWorks: 'Twelve works at random',
     filterThese: 'Filter these…',
     noMatchHere: 'None of these works match.',
     viewGrid: 'Grid',
@@ -296,6 +300,8 @@ const UI = {
     worksAround: 'Œuvres autour de ce point',
     clearPoint: 'Retirer le point',
     nothingInRadius: 'Rien dans ce rayon. Essayez de l’élargir.',
+    allArtworks: 'Toutes les œuvres',
+    randomWorks: 'Douze œuvres au hasard',
     filterThese: 'Filtrer parmi celles-ci…',
     noMatchHere: 'Aucune de ces œuvres ne correspond.',
     viewGrid: 'Grille',
@@ -422,6 +428,8 @@ const UI = {
     worksAround: 'Opere intorno a questo punto',
     clearPoint: 'Togli il punto',
     nothingInRadius: 'Niente in quel raggio. Prova ad allargarlo.',
+    allArtworks: 'Tutte le opere',
+    randomWorks: 'Dodici opere a caso',
     filterThese: 'Filtra tra queste…',
     noMatchHere: 'Nessuna di queste opere corrisponde.',
     viewGrid: 'Griglia',
@@ -538,6 +546,8 @@ const UI = {
     worksAround: 'Werke rund um diesen Punkt',
     clearPoint: 'Punkt entfernen',
     nothingInRadius: 'Nichts in diesem Radius. Versuche ihn zu vergrößern.',
+    allArtworks: 'Alle Werke',
+    randomWorks: 'Zwölf zufällige Werke',
     filterThese: 'Diese filtern…',
     noMatchHere: 'Keines dieser Werke passt.',
     viewGrid: 'Raster',
@@ -654,6 +664,8 @@ const UI = {
     worksAround: 'Obras à volta deste ponto',
     clearPoint: 'Retirar o ponto',
     nothingInRadius: 'Nada nesse raio. Tenta alargá-lo.',
+    allArtworks: 'Todas as obras',
+    randomWorks: 'Doze obras ao acaso',
     filterThese: 'Filtrar entre estas…',
     noMatchHere: 'Nenhuma destas obras corresponde.',
     viewGrid: 'Grelha',
@@ -770,6 +782,8 @@ const UI = {
     worksAround: 'Werken rond dit punt',
     clearPoint: 'Punt wissen',
     nothingInRadius: 'Niets binnen die straal. Probeer hem te vergroten.',
+    allArtworks: 'Alle werken',
+    randomWorks: 'Twaalf willekeurige werken',
     filterThese: 'Hierin filteren…',
     noMatchHere: 'Geen van deze werken komt overeen.',
     viewGrid: 'Raster',
@@ -888,6 +902,62 @@ export function t(lang: Lang, key: UIKey): string {
  * etiqueta suelta chirrían. Solo se toca la inicial: pasar la cadena entera por
  * un `initcap` destrozaría "pintura del Siglo de oro neerlandés" y "Les Nabis".
  */
+/*
+ * El país de origen de un artista, dicho en el idioma de quien mira.
+ *
+ * `artists.nationality` guarda la etiqueta que da Wikidata para P27, en inglés
+ * y sin código de país: «France», «Dutch Republic», «Qing dynasty». Los museos
+ * sí traducen su país, porque la ingesta les guarda `country_code` y una fila
+ * por idioma; los artistas no tienen ni una cosa ni la otra.
+ *
+ * La traducción sale de los datos que el propio motor ya trae —`Intl`— y no de
+ * una tabla escrita a mano que habría que mantener: se recorren los códigos ISO
+ * de región, se pregunta cómo se llama cada uno EN INGLÉS, y eso da un
+ * diccionario «nombre inglés → código» con el que traducir al idioma que sea.
+ *
+ * Medido sobre las 220 nacionalidades del catálogo: reconoce 38, que son el
+ * **62% de los artistas**. El resto son estados que ya no existen —«Republic of
+ * Venice», «Habsburg Netherlands», «Russian Empire»— y ahí se deja lo que dice
+ * Wikidata, que es la respuesta verdadera aunque esté en inglés. Inventarles un
+ * nombre en español sería peor que no traducirlos.
+ *
+ * OJO: esto es solo para ENSEÑAR. El filtro de la lista de artistas compara
+ * contra el texto exacto de la base, así que el valor que viaja en la URL tiene
+ * que seguir siendo el de Wikidata.
+ */
+let porNombre: Map<string, string> | null = null;
+
+function codigosDePais(): Map<string, string> {
+  if (porNombre) return porNombre;
+  porNombre = new Map();
+
+  const en = new Intl.DisplayNames(['en'], { type: 'region' });
+  for (let a = 65; a <= 90; a++) {
+    for (let b = 65; b <= 90; b++) {
+      const code = String.fromCharCode(a, b);
+      let nombre: string | undefined;
+      try { nombre = en.of(code); } catch { continue; }
+      // El primero gana: «France» sale de FR y también del obsoleto FX, y el
+      // que queremos es el vigente, que llega antes por orden alfabético.
+      if (nombre && nombre !== code && !porNombre.has(nombre.toLowerCase())) {
+        porNombre.set(nombre.toLowerCase(), code);
+      }
+    }
+  }
+  return porNombre;
+}
+
+export function countryName(lang: Lang, etiqueta: string): string {
+  const code = codigosDePais().get(etiqueta.toLowerCase());
+  if (!code) return capitalize(etiqueta);
+
+  try {
+    return new Intl.DisplayNames([lang], { type: 'region' }).of(code) ?? capitalize(etiqueta);
+  } catch {
+    return capitalize(etiqueta);
+  }
+}
+
 export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

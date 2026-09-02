@@ -790,6 +790,19 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
 .atenuado { opacity: 0.45; transition: opacity 120ms ease; }
 @media (prefers-reduced-motion: reduce) { .atenuado { transition: none; } }
 .buscador-lista input[type="search"] { flex: 1 1 220px; min-width: 0; }
+
+/*
+ * «Ordenar» va al lado de su desplegable, no encima.
+ *
+ * La caja de filtrar crece (`flex: 1 1 220px`) y la etiqueta se encogía hasta
+ * partirse en dos líneas: el rótulo arriba y el desplegable debajo, más altos
+ * que todo lo demás de la fila. Sin encogerse, la palabra le quita sitio a la
+ * caja, que es de quien sobra.
+ */
+.buscador-lista label {
+  display: flex; align-items: center; gap: 6px;
+  flex: 0 0 auto; white-space: nowrap;
+}
 .buscador-lista select { flex: 0 1 auto; max-width: 220px; }
 
 /* Un año son cuatro cifras y un signo: más ancho solo invita a escribir otra

@@ -18,6 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 3 de septiembre de 2026 (tarde) | Doce obras al azar; el país del pintor; «36+ obras» y el título del buscador |
 | 3 de septiembre de 2026 | Buscar dentro del radio; lista y orden; «Buscador»; el header en el móvil; las minúsculas |
 | 2 de septiembre de 2026 (noche) | El museo se busca por su nombre; 200 km en el radio del mapa |
 | 2 de septiembre de 2026 (tarde) | Añadir un museo desde el panel; el trabajador dice si está escuchando; NOTAS partido en dos |
@@ -26,6 +27,92 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 3 de septiembre de 2026 (tarde): doce obras al azar, y de dónde es el pintor
+
+### Cuatro cosas que decían lo que no era
+
+- **«Ordenar» partido en dos líneas.** La caja de filtrar crece
+  (`flex: 1 1 220px`) y la etiqueta se encogía hasta romperse, dejando el rótulo
+  encima del desplegable y esa parte de la fila más alta que el resto. La
+  etiqueta pasa a `flex: 0 0 auto` con `white-space: nowrap`: la palabra le
+  quita sitio a la caja, que es de quien sobra.
+- **«Explorar el mapa» en una pantalla sin mapa.** El título del buscador usaba
+  la clave `explore`, que es la de la barra de secciones. Sin consulta, esa
+  pantalla es el catálogo entero con filtros: «Todas las obras».
+- **«36+ obras».** No era un total: eran las que caben en una página. En un
+  catálogo de 135.258 no significaba nada. Ahora la cifra solo sale cuando ES el
+  número —primera página y sin siguiente—; contar las coincidencias de una
+  búsqueda con comodines se paga en el corte de 3 s, y para lo demás ya está la
+  paginación, que enseña «Página N».
+
+### Las doce de la portada, al azar
+
+Eran siempre las mismas doce, las de más notabilidad. Una portada que enseña lo
+mismo cada vez deja de proponer nada.
+
+`search_artworks` sin consulta ordena por notabilidad y pagina con `offset`, así
+que el azar es entrar por un desplazamiento cualquiera. **El techo se midió**,
+con la clave `anon` que es la que tiene el corte de 3 s:
+
+| offset | | offset | |
+|---|---|---|---|
+| 0 | 621 ms | 5.000 | 1.334 ms |
+| 1.000 | 234 ms | 8.000 | 1.054 ms |
+| 3.000 | 1.493 ms | 10.000 | **se pasa** |
+
+Se queda en 5.000: sobra variedad, queda la mitad del presupuesto libre, y a
+partir de ahí la notabilidad ya es 2 sobre 146 —la cola larga del catálogo—.
+
+**Y lleva red, que es lo que casi se me olvida.** `offset 0` era la consulta más
+barata que existe contra esa función; entrar por un desplazamiento la encarece,
+y `searchArtworks` lanza `BusquedaDemasiadoAncha` cuando la base corta. Sin
+atrapar eso, un día lento la portada se caía con «Application error» — y pasó,
+en pruebas, antes de ponerle la red. Si el azar no llega a tiempo se piden las
+de siempre. Solo se atrapa el corte por tiempo; cualquier otro error sigue
+subiendo.
+
+Cambian cada hora y no en cada visita: manda el `revalidate` de la página, y
+hacerlas distintas por visitante sería volver dinámica la portada entera y pagar
+una consulta por visita. Por eso el título lo dice —«Doce obras al azar»—: sin
+decirlo, que cambien parece un fallo.
+
+### El país del pintor
+
+Estaba en los datos y no se enseñaba: la única manera de saber de dónde era un
+pintor era volver a la lista de artistas y buscarlo. Ahora sale en su ficha y
+lleva a esa lista ya filtrada, que es la pregunta que uno se hace al leerlo:
+«¿y quién más de ahí?».
+
+Lo interesante fue la traducción. Los museos traducen su país porque la ingesta
+les guarda `country_code` y una fila por idioma; los artistas guardan de P27 solo
+la etiqueta inglesa, sin código. Antes de escribir una tabla a mano se probó
+sacarla de los datos que el propio motor ya trae: recorrer los códigos ISO de
+región, preguntar cómo se llama cada uno **en inglés**, y con ese diccionario
+«nombre inglés → código» traducir a lo que sea.
+
+Medido sobre las 220 nacionalidades del catálogo: reconoce **38, que son el 62%
+de los artistas**. El resto son estados que ya no existen —«Republic of Venice»,
+«Habsburg Netherlands», «Qing dynasty»— y ahí se deja lo que dice Wikidata, que
+es la respuesta verdadera aunque esté en inglés. Inventarles un nombre en
+español sería peor.
+
+Un detalle que solo se ve mirando la salida: «France» sale de `FR` y también del
+obsoleto `FX`, y el último ganaba. Gana el primero, que por orden alfabético es
+el vigente.
+
+Y lo que se enseña no es lo que se busca: en la URL viaja el texto exacto de
+Wikidata —`?nat=Spain`— porque es contra lo que compara el filtro; «España» es
+solo lo que se lee. Comprobado el viaje entero en el navegador: la ficha de
+Monet dice «Francia», su enlace es `?nat=France`, y la lista vuelve filtrada con
+el desplegable en `France` y sus filas diciendo «Francia».
+
+Queda apuntado en `NOTAS.md` lo que no se ha tocado y molesta más que el idioma:
+un mismo sitio está en cinco cubos —Dutch Republic, Habsburg Netherlands,
+Southern Netherlands, Kingdom of the Netherlands, Netherlands—, y juntarlos es
+una decisión histórica, no técnica.
 
 ---
 

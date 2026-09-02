@@ -87,11 +87,25 @@ export default async function SearchPage({ params, searchParams }: Params) {
 
   return (
     <>
+      {/*
+        * El título decía «Explorar el mapa» y aquí no hay mapa: la clave
+        * `explore` es la de la barra de secciones, y se coló. Sin consulta,
+        * esta pantalla es el catálogo entero con filtros.
+        *
+        * Y la cifra decía «36+ obras», que no es un total sino las que caben en
+        * una página: en un catálogo de 135.258 no significaba nada. Ahora solo
+        * se pone cuando ES el número —una página única, la primera y sin
+        * siguiente—; en cuanto hay más páginas, contar las coincidencias de una
+        * búsqueda con comodines se paga en el corte de 3 s, así que no se
+        * cuenta y lo dice la paginación, que para eso enseña «Página N».
+        */}
       <h1 style={{ paddingTop: 26 }}>
-        {sp.q ? `“${sp.q}”` : t(lang, 'explore')}
-        <span className="muted" style={{ fontSize: '1rem', fontWeight: 400, marginLeft: 10 }}>
-          {!ancha && <>{formatNumber(lang, results.length)}{hayMas && '+'}{' '}{t(lang, 'artworks')}</>}
-        </span>
+        {sp.q ? `“${sp.q}”` : t(lang, 'allArtworks')}
+        {!ancha && !hayMas && pagina === 1 && (
+          <span className="muted" style={{ fontSize: '1rem', fontWeight: 400, marginLeft: 10 }}>
+            {formatNumber(lang, results.length)} {t(lang, 'artworks')}
+          </span>
+        )}
       </h1>
 
       {/* Formulario GET, sin JavaScript: los filtros quedan en la URL y por
