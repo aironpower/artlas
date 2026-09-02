@@ -1,6 +1,6 @@
 # Notas de trabajo
 
-Estado de Artlas al **2 de septiembre de 2026** y lo siguiente a hacer.
+Estado de Artlas al **3 de septiembre de 2026** y lo siguiente a hacer.
 
 **Aquí solo vive lo que sigue siendo verdad hoy.** La crónica de lo ya hecho
 —con el porqué de cada decisión y lo que se aprendió rompiéndola— está en
@@ -16,9 +16,10 @@ y se cuenta allí.**
 
 ## AL EMPEZAR
 
-Cifras **comprobadas contra la base el 2 de septiembre**, no heredadas de la
+Cifras **comprobadas contra la base el 3 de septiembre**, no heredadas de la
 sesión anterior (`npm run check-db`, `migrate -- --status` y una consulta
-directa de estados):
+directa de estados). Las de obras, imágenes y artistas no se tocaron ese día
+—solo se leyeron—, así que siguen siendo las del 2:
 
 | | |
 |---|---|
@@ -29,7 +30,7 @@ directa de estados):
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
 | Migraciones | `0001`–`0046` · **46 aplicadas, 0 pendientes** |
-| Espacio | **406,5 MB** de los 500 del plan gratuito (81,3%) |
+| Espacio | **406,6 MB** de los 500 del plan gratuito (81,3%) |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
 con una ingesta viva ya tumbó un museo entero. En PowerShell,
@@ -69,7 +70,7 @@ en el historial.
 - **Un rol.** El panel es `requireAdmin` a secas: delegar hoy es hacer
   administrador a otra persona, con todo lo que eso abre.
 
-Y el aviso que no se puede olvidar antes de invitar a nadie: **quedan ~98 MB**,
+Y el aviso que no se puede olvidar antes de invitar a nadie: **quedan ~93 MB**,
 unas 105.000 obras. Un museo grande se los come.
 
 ### 2. Cabos conocidos, de un rato cada uno
@@ -81,8 +82,15 @@ unas 105.000 obras. Un museo grande se los come.
   hizo con las fechas de los movimientos. Coste conocido y acotado, no una fuga.
 - **`artworks_title_trgm`: 25 MB y `idx_scan = 0`.** Es parcial —solo
   publicadas— y por eso no lo usa nadie; corregir por título no llega a las
-  obras que esperan datos. Cambiarlo por uno completo son ~40 MB. No se hizo en
-  su momento porque había una ingesta de 121.000 obras escribiendo.
+  obras que esperan datos. Cambiarlo por uno completo son ~40 MB.
+
+  **Comprobado otra vez el 3 de septiembre y sigue en cero**, aunque el
+  comentario de la migración `0044` llegó a decir lo contrario: buscar dentro
+  del radio tira de `artists_name_trgm` (1.932 lecturas) y de
+  `artwork_translations_title_trgm` (3), no de este. Sigue siendo peso muerto.
+  La decisión —tirarlo y recuperar 25 MB, o cambiarlo por uno completo y gastar
+  15 más para poder corregir por título las 134.000 que esperan— sigue sin
+  tomarse.
 - **Buscar y la lista de artistas siguen con botón de paginación**, mientras que
   la ficha de museo ya sigue sola al llegar abajo.
 - **Las obras del radio son 60 como mucho**, las más destacadas. Con el buscador
@@ -100,26 +108,48 @@ unas 105.000 obras. Un museo grande se los come.
 - **`ingest_runs`, `ingest_steps` y `jobs` no se borran nunca.** Son diminutas
   —unas 48 filas por barrido—; si algún día molestan, la retención es trivial.
 
-### 3. Lo que pidió Manuel el 3 de septiembre y no está hecho
+### 3. Lo que pidió Manuel el 3 de septiembre y sigue pendiente
 
-En orden de lo que cuesta averiguar, no de lo que cuesta escribir. Las tres
-primeras tocan **espacio**, y quedan ~93 MB.
+De su lista de nueve, siete están hechas y contadas en el historial. Quedan
+estas dos, y ninguna se puede empezar a escribir sin decidir algo antes.
 
 - **Compartir un favorito.** Hoy los favoritos son privados por política de
-  fila. Compartir uno es decidir qué se comparte —una obra suelta o la lista— y
-  con qué permiso: una URL con testigo que cualquiera abra, o solo entre
-  usuarios. Es una decisión de producto antes que una tabla.
+  fila, así que compartir no es «añadir un botón»: es decidir **qué** se
+  comparte y **con qué permiso**.
+
+  Lo que hay que responder primero:
+  · ¿Una obra suelta, o la lista entera?
+  · ¿Una URL con testigo que abra cualquiera sin cuenta, o solo entre usuarios
+    registrados?
+  · Si es lo primero, ¿se puede revocar? Un enlace que no caduca ni se retira es
+    una lista pública que su dueño cree privada.
+
+  Con eso decidido, el trabajo es una columna de testigo, una política de
+  lectura y una página. Sin eso decidido, cualquier cosa que escriba será la
+  equivocada.
+
 - **Fichas de artista al modo Smartify**: biografía, y más datos de la obra.
-  `artists.description` es la frase de una línea de Wikidata, no una biografía.
-  Una de verdad sale del extracto de Wikipedia, y **hay que medir antes de
-  prometerlo**: 21.619 artistas × un párrafo × tres idiomas es espacio, y solo
-  11.426 tienen obra publicada. Empezar por esos.
-- **~~País de origen del pintor~~**: hecho el 3 de septiembre. Se enseña en su
-  ficha y lleva a la lista filtrada. Lo que queda de ahí es dato, no pantalla, y
-  está abajo con las decisiones.
-- **~~Artistas relacionados~~**: hecho el 3 de septiembre. En la ficha del
-  artista, con el porqué de cada uno. Pesos: país 2, movimiento 2, época 1,
-  museo 1 (migración `0046`).
+
+  `artists.description` es la frase de una línea de Wikidata —«pintor español
+  (1746-1828)»—, no una biografía. Una de verdad sale del extracto de Wikipedia
+  (`action=query&prop=extracts&exintro`), que es una fuente que ya usamos de
+  hecho para otras cosas y que no cuesta permisos.
+
+  **Lo primero es medir, no traer.** El orden que yo seguiría:
+  1. Bajar el extracto de **50 artistas** y medir cuánto ocupa uno de media en
+     los tres idiomas. Diez minutos, y decide todo lo demás.
+  2. Multiplicar por **11.426**, que son los que tienen obra publicada — no por
+     21.619. A los que no se ven no hay que escribirles biografía.
+  3. Comparar con los **~93 MB** que quedan y decidir: todos, o solo los que
+     pasen de N obras.
+
+  Si sale caro, hay una salida que no ocupa nada: enlazar a Wikipedia en vez de
+  copiar el texto. Peor ficha, cero bytes, y encaja con la postura de derechos
+  que ya se tomó para las imágenes —miniatura y enlace a la fuente—.
+
+  Lo de «más datos de los cuadros» es otra cosa y más barata: la ficha de obra
+  ya trae técnica, género, fecha y dimensiones; lo que falta por decidir es qué
+  más de Wikidata merece la pena (inventario, procedencia, exposiciones).
 
 ### 4. Decisiones de Manuel, no trabajo
 

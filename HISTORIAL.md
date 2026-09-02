@@ -265,10 +265,15 @@ Cabe la completa con holgura, así que se coge la completa: buscar solo en
 escribe el nombre del pintor, que es como busca la gente.
 
 **Que buscar por más columnas salga más barato que por menos** no es un error de
-lectura. `artworks_title_trgm` es parcial sobre `published` y llevaba desde
-siempre con `idx_scan = 0` —25 MB que no usaba nadie, apuntados en NOTAS como
-peso muerto—; en cuanto la condición se combina con `artists_name_trgm` el
-planificador escoge otro camino. Esta consulta es su primer usuario.
+lectura: al combinarse con los índices de nombre de artista y de título traducido
+el planificador escoge otro camino que cuando solo puede mirar `artworks.title`.
+
+*(Corregido esa misma noche, midiendo: al escribir esto di por hecho que el
+índice que se ponía a trabajar era `artworks_title_trgm`, los 25 MB muertos.
+No lo es. En `pg_stat_user_indexes`, `artists_name_trgm` va por 1.932 lecturas y
+`artwork_translations_title_trgm` por 3; `artworks_title_trgm` sigue en 0. Lo
+supuse por los tiempos en vez de mirarlo, que es exactamente lo que este
+proyecto tiene por norma no hacer.)*
 
 El filtro va **dentro del paso 1**, junto al de movimiento y por su mismo
 motivo, que `0040` ya dejó escrito: aplicado después del `limit 60` devolvería

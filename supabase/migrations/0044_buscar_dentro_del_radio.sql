@@ -38,10 +38,16 @@
 -- son de caché fría; se cuentan porque el usuario también los paga.
 --
 -- Que buscar por MÁS columnas salga más barato que por menos no es un error de
--- lectura: `artworks_title_trgm` es parcial sobre `published` y hasta hoy tenía
--- `idx_scan = 0` —25 MB que no usaba nadie—; en cuanto la condición se combina
--- con `artists_name_trgm`, el planificador escoge otro camino. Esta consulta es
--- el primer usuario de ese índice.
+-- lectura: al combinarse con `artists_name_trgm` y con
+-- `artwork_translations_title_trgm`, el planificador escoge otro camino que
+-- cuando solo puede mirar `artworks.title`.
+--
+-- CORREGIDO después de medirlo: al escribir esto supuse que el que se ponía a
+-- trabajar era `artworks_title_trgm` —25 MB con `idx_scan = 0` desde siempre—.
+-- No es verdad. Comprobado en `pg_stat_user_indexes` tras usar la función:
+-- `artists_name_trgm` va por 1.932 lecturas y `artwork_translations_title_trgm`
+-- por 3; `artworks_title_trgm` **sigue en 0**. Es parcial sobre `published` y no
+-- lo usa nadie: sigue siendo peso muerto, y sigue apuntado en NOTAS.
 --
 -- ## Menos de dos letras no es una búsqueda
 --
