@@ -28,7 +28,7 @@ directa de estados):
 | Museos | **48 de 48**, en 34 ciudades |
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
-| Migraciones | `0001`–`0045` · **45 aplicadas, 0 pendientes** |
+| Migraciones | `0001`–`0046` · **46 aplicadas, 0 pendientes** |
 | Espacio | **406,5 MB** de los 500 del plan gratuito (81,3%) |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
@@ -117,10 +117,9 @@ primeras tocan **espacio**, y quedan ~93 MB.
 - **~~País de origen del pintor~~**: hecho el 3 de septiembre. Se enseña en su
   ficha y lleva a la lista filtrada. Lo que queda de ahí es dato, no pantalla, y
   está abajo con las decisiones.
-- **Artistas relacionados** por país, época, museo o movimiento. Es lo último de
-  la lista a propósito: las cuatro relaciones existen ya como columnas, así que
-  el trabajo no es tenerlas sino elegir cuál manda cuando varias coinciden, y
-  eso se decide mirando ejemplos reales, no de antemano.
+- **~~Artistas relacionados~~**: hecho el 3 de septiembre. En la ficha del
+  artista, con el porqué de cada uno. Pesos: país 2, movimiento 2, época 1,
+  museo 1 (migración `0046`).
 
 ### 4. Decisiones de Manuel, no trabajo
 

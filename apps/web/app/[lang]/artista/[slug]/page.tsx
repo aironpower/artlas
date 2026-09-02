@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isLang, t, formatNumber, countryName, historicalState } from '@/lib/i18n';
-import { getArtist, artworksByArtist } from '@/lib/data';
+import {
+  isLang, t, formatNumber, formatYears, countryName, historicalState, type Lang,
+} from '@/lib/i18n';
+import { getArtist, artworksByArtist, relatedArtists, type RelatedArtist } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtistMap from '@/components/ArtistMap';
 import ArtworkGrid from '@/components/ArtworkGrid';
@@ -63,6 +65,13 @@ export default async function ArtistPage({ params, searchParams }: Props) {
 
   // Museos distintos, no obras: es lo que el mapa puede enseñar como puntos
   // separados, porque las obras de un mismo museo comparten coordenadas.
+  /*
+   * Los relacionados se piden aquí y no dentro de la sección porque van en el
+   * mismo viaje: es una consulta de 60-900 ms y bloquearía el renderizado si
+   * esperara a que termine lo de arriba.
+   */
+  const relacionados = await relatedArtists(lang, slug);
+
   const museums = new Set(
     works.map((w) => w.institution_id).filter((id): id is number => id !== null),
   );
@@ -123,6 +132,56 @@ export default async function ArtistPage({ params, searchParams }: Props) {
           pageSize={POR_PAGINA}
         />
       </section>
+
+      {/*
+        * Solo en la primera página. En la cuarta página de obras de Rembrandt,
+        * quien está mirando ya sabe a quién quiere ver; los relacionados son
+        * una puerta de salida, y las puertas van donde se entra.
+        */}
+      {pagina === 1 && relacionados.length > 0 && (
+        <section style={{ paddingTop: 28 }}>
+          <h2>{t(lang, 'relatedArtists')}</h2>
+          <ul className="relacionados">
+            {relacionados.map((r) => (
+              <li key={r.slug}>
+                <Link href={path(lang, 'artist', r.slug)}>{r.name}</Link>
+                <span className="muted small">
+                  {formatYears(lang, r.birth_year, r.death_year) ?? ''}
+                  {' · '}
+                  {formatNumber(lang, r.artwork_count)} {t(lang, 'artworks')}
+                </span>
+                <span className="muted small">{porQue(lang, r)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
+}
+
+/**
+ * Por qué está ahí ese artista.
+ *
+ * Una lista de sugeridos que no dice de dónde sale es una caja negra, y en este
+ * proyecto las cajas negras se abren — es la misma regla que hizo que la ingesta
+ * tenga panel en vez de un log.
+ *
+ * En sustantivos sueltos —«en común: país · movimiento»— y no en frases. Con
+ * «mismo país · mismo movimiento · misma época · mismo museo» cada tarjeta se
+ * comía tres líneas repitiendo «mismo», y como los primeros coinciden en las
+ * cuatro cosas, ocho tarjetas decían ocho veces lo mismo a lo largo y ancho.
+ *
+ * El orden es el de los pesos de la consulta: primero lo que relaciona —país y
+ * movimiento—, luego lo que solo desempata.
+ */
+function porQue(lang: Lang, r: RelatedArtist): string {
+  const motivos = [
+    r.same_country && t(lang, 'sameCountry'),
+    r.same_movement && t(lang, 'sameMovement'),
+    r.same_period && t(lang, 'samePeriod'),
+    r.same_museum && t(lang, 'sameMuseum'),
+  ].filter((m): m is string => typeof m === 'string');
+
+  return motivos.length > 0 ? `${t(lang, 'inCommon')}: ${motivos.join(' · ')}` : '';
 }

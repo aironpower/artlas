@@ -18,7 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
-| 3 de septiembre de 2026 (noche) | Un pintor, un país: las nacionalidades, agrupadas |
+| 3 de septiembre de 2026 (noche) | Un pintor, un país; y artistas relacionados |
 | 3 de septiembre de 2026 (tarde) | Doce obras al azar; el país del pintor; «36+ obras» y el título del buscador |
 | 3 de septiembre de 2026 | Buscar dentro del radio; lista y orden; «Buscador»; el header en el móvil; las minúsculas |
 | 2 de septiembre de 2026 (noche) | El museo se busca por su nombre; 200 km en el radio del mapa |
@@ -87,6 +87,54 @@ etiqueta tiene dos letras.
 
 Comprobado: `/es/artistas?nat=NL` devuelve una lista donde están **Rembrandt y
 Van Gogh a la vez**, que era exactamente lo que no pasaba.
+
+### Y encima de eso, los artistas relacionados
+
+Agrupar los países no era un fin en sí mismo: era lo que faltaba para poder
+relacionar autores. La migración `0046` lo hace por las cuatro cosas que pidió
+Manuel —país, época, museo, movimiento—, y lo único que había que decidir era
+cuál manda cuando varias coinciden.
+
+**Se decidió mirando resultados.** Con país 2 · movimiento 2 · época 1 · museo 1:
+
+| | |
+|---|---|
+| Rembrandt | Ostade, Steen, Hals, Cuyp, De Hooch |
+| Rubens | Van Dyck, Jordaens, Snyders |
+| Monet | Gauguin, Degas, Renoir, Cézanne, Pissarro |
+| Daumier | Corot, Manet, Courbet, Millet |
+
+País y movimiento pesan doble porque son los que dicen algo. La época sola no
+—en 1850 pintaba medio mundo— y el museo tampoco: compartir el Louvre no
+relaciona a nadie con nadie. Los dos valen de desempate, que es lo que un peso
+de 1 hace.
+
+#### Quince segundos, y la vuelta que los arregló
+
+La primera versión puntuaba a los 21.619 artistas y le miraba el museo a cada
+uno: **15.124 ms para Rembrandt**, cinco veces el corte de 3 s. El museo es lo
+caro —28 museos suyos, miles de obras en cada uno—.
+
+Al revés funciona: primero se arma un conjunto pequeño —los del mismo país más
+los de los mismos movimientos— y el museo solo se mira para esos. **1.616 ms en
+frío y 59 en caliente.** El museo deja de ser una forma de encontrar candidatos
+y pasa a ser lo que de verdad es: un desempate.
+
+#### Dice por qué
+
+Cada tarjeta lleva su motivo —«en común: país · movimiento · época · museo»—,
+porque una lista de sugeridos que no dice de dónde sale es una caja negra, y
+aquí las cajas negras se abren; es la misma regla que hizo que la ingesta tenga
+panel en vez de un log.
+
+La primera redacción era en frases —«mismo país · mismo movimiento · misma
+época · mismo museo»— y cada tarjeta se comía tres líneas repitiendo «mismo».
+Como los primeros coinciden en las cuatro cosas, ocho tarjetas decían ocho veces
+lo mismo a lo largo y ancho. En sustantivos sueltos cabe y se lee.
+
+Solo salen en la primera página: en la cuarta página de obras de Rembrandt,
+quien mira ya sabe a quién quiere ver, y los relacionados son una puerta de
+salida.
 
 ---
 

@@ -339,6 +339,41 @@ export async function getArtist(lang: Lang, slug: string): Promise<Artist | null
   )[0] ?? null;
 }
 
+export interface RelatedArtist {
+  slug: string;
+  name: string;
+  nationality: string | null;
+  nationality_code: string | null;
+  birth_year: number | null;
+  death_year: number | null;
+  artwork_count: number;
+  /** Por qué está aquí. La pantalla lo dice; una sugerencia sin motivo es una
+   *  caja negra, y en este proyecto las cajas negras se abren. */
+  same_country: boolean;
+  same_period: boolean;
+  same_movement: boolean;
+  same_museum: boolean;
+}
+
+/**
+ * Artistas parecidos a uno dado: mismo país, movimiento, época o museo.
+ *
+ * Los pesos —país 2, movimiento 2, época 1, museo 1— están en la migración
+ * 0046 con lo que se midió para elegirlos. Aquí solo se pide y se pinta.
+ */
+export async function relatedArtists(
+  lang: Lang,
+  slug: string,
+  limit = 8,
+): Promise<RelatedArtist[]> {
+  const { data, error } = await db().rpc('related_artists', {
+    p_slug: slug, p_lang: lang, max_results: limit,
+  });
+
+  if (error) throw new Error(`relacionados de ${slug}: ${error.message}`);
+  return conInicialMayuscula((data ?? []) as RelatedArtist[], ['name']);
+}
+
 /**
  * Todas las obras de un artista, cada una con su posición.
  *

@@ -900,6 +900,27 @@ footer { border-top: 1px solid var(--border); margin-top: 48px; padding: 26px 0;
 input[type='email'], input[type='password'], select { font-size: 16px; }
 }
 
+/*
+ * Los artistas relacionados: una rejilla de nombres con su porqué.
+ *
+ * No son tarjetas con imagen a propósito. La ficha ya trae un mapa y hasta 36
+ * obras; otra rejilla de fotos abajo compite con lo que se ha venido a ver, y
+ * además la mitad de los artistas no tiene retrato. Un nombre, sus años y por
+ * qué está ahí caben en tres líneas y se leen de un vistazo.
+ */
+.relacionados {
+  list-style: none; margin: 16px 0 0; padding: 0;
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+}
+.relacionados li {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 11px 13px;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface);
+}
+.relacionados a { font-weight: 600; }
+
 /* Un botón que se lee como un enlace, para «Salir»: es una acción y necesita un
    formulario, pero al lado de tres enlaces tiene que parecerse a ellos. */
 .enlace {
