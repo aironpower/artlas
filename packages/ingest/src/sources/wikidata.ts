@@ -186,6 +186,38 @@ function parsePoint(wkt?: string): { lat: number; lng: number } | undefined {
 // 1. Metadatos del museo
 // ---------------------------------------------------------------------------
 
+/**
+ * ¿Existe esta entidad, y cómo se llama? `null` si Wikidata no la tiene.
+ *
+ * Va por la API de entidades y no por SPARQL **a propósito**. Preguntarle a
+ * WDQS por un QID inventado tarda medio minuto en morir con «504 Gateway
+ * Timeout» —cuatro reintentos de una consulta que nunca va a devolver nada— y
+ * ese sería el mensaje que vería quien se equivoca de número al añadir un museo
+ * desde el panel. Esta responde en 0,4 s y, sobre todo, **distingue "no existe"
+ * de "Wikidata no contesta"**, que piden cosas distintas a quien lo ha pedido:
+ * corregir el identificador, o volver a intentarlo más tarde.
+ *
+ * Por eso también `retries: 1`: aquí un fallo de red no se insiste, se cuenta.
+ */
+export async function fetchEntityLabel(qid: string): Promise<string | null> {
+  const url =
+    'https://www.wikidata.org/w/api.php?action=wbgetentities&format=json' +
+    `&props=labels&languages=${encodeURIComponent('es|en')}&ids=${encodeURIComponent(qid)}`;
+
+  const res = await fetchJson<{
+    entities?: Record<string, { missing?: string; labels?: Record<string, { value: string }> }>;
+  }>(url, {
+    headers: { 'User-Agent': USER_AGENT },
+    retries: 1,
+    label: `entidad ${qid}`,
+  });
+
+  const entidad = res.entities?.[qid];
+  if (!entidad || entidad.missing !== undefined) return null;
+
+  return entidad.labels?.es?.value ?? entidad.labels?.en?.value ?? qid;
+}
+
 export async function fetchInstitution(museumQid: string): Promise<CanonicalInstitution | null> {
   const query = `
     SELECT ?mLabel ?coord ?cityLabel ?countryLabel ?iso ?website ?image ?visitors

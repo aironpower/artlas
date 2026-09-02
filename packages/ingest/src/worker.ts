@@ -55,6 +55,15 @@ const GRACIA_MS = 10 * 60 * 1000;
 const LINEAS_GUARDADAS = 400;
 const BYTES_GUARDADOS = 64 * 1024;
 
+/**
+ * Cada cuánto dice «sigo aquí» aunque no esté haciendo nada.
+ *
+ * Diez segundos y no tres: esto no mide progreso, solo presencia, y el panel lo
+ * lee con un margen de un minuto. Latir más deprisa no adelantaría ninguna
+ * respuesta y escribiría seis veces más filas muertas en una tabla de una fila.
+ */
+const PRESENCIA_MS = 10_000;
+
 // ---------------------------------------------------------------------------
 // El mapa: de encargo a comando. La lista cerrada.
 // ---------------------------------------------------------------------------
@@ -333,6 +342,50 @@ async function ejecutar(db: SupabaseClient, job: Job): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// «Sigo aquí»
+// ---------------------------------------------------------------------------
+
+/** Cuándo arrancó ESTE proceso. Se manda en cada latido para que un reinicio se vea. */
+const ARRANQUE = new Date().toISOString();
+
+/** El encargo que se está ejecutando, o null si solo se está esperando. */
+let encargoActual: number | null = null;
+
+/** Solo se avisa del primer fallo al latir, no de los 360 de una hora. */
+let avisadoDePresencia = false;
+
+/**
+ * Le dice a la base que este trabajador está escuchando.
+ *
+ * Late siempre, haya encargo o no, y ahí está la diferencia con
+ * `jobs.heartbeat_at`: aquel dice «este encargo avanza» y solo existe mientras
+ * hay uno. Sin esto, un trabajador esperando y un trabajador que no existe se
+ * ven igual desde el panel —nada—, y quien pulse un botón con el ordenador de
+ * casa apagado ve su encargo en cola sin saber por qué.
+ *
+ * **Escribir esto no puede tumbar al trabajador.** Es la misma regla que
+ * gobierna `run-log.ts`: perder una ingesta de nueve horas por no poder anotar
+ * un latido sería absurdo. Se avisa una vez y se sigue trabajando a ciegas.
+ */
+async function seguirAqui(db: SupabaseClient): Promise<void> {
+  const { error } = await db.from('workers').upsert({
+    host: hostname(),
+    pid: process.pid,
+    started_at: ARRANQUE,
+    last_seen: new Date().toISOString(),
+    job_id: encargoActual,
+  }, { onConflict: 'host' });
+
+  if (error && !avisadoDePresencia) {
+    avisadoDePresencia = true;
+    console.warn(
+      `  (no se puede anotar la señal de vida: ${error.message}.\n` +
+      '   El trabajo sigue, pero el panel dirá que no hay nadie escuchando.)',
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // El bucle
 // ---------------------------------------------------------------------------
 
@@ -371,6 +424,14 @@ async function main() {
   console.log(`Artlas · trabajador en ${hostname()} (pid ${process.pid})`);
   console.log(`Escuchando encargos${unaVez ? ' (solo uno)' : ''}. Se piden desde /es/admin/ingesta.\n`);
 
+  /*
+   * El primero antes de nada: el panel tiene que poder decir «hay alguien» en
+   * cuanto se abre esta ventana, no diez segundos después.
+   */
+  await seguirAqui(db);
+  const presencia = setInterval(() => { void seguirAqui(db); }, PRESENCIA_MS);
+  presencia.unref(); // que este latido no sea lo que impide al proceso terminar
+
   for (;;) {
     try {
       /*
@@ -384,7 +445,25 @@ async function main() {
       const job = await siguiente(db);
 
       if (job) {
-        await ejecutar(db, job);
+        /*
+         * Se anota en cuanto se coge y se suelta pase lo que pase, para que el
+         * panel no acabe enseñando «ocupado con el #12» de un encargo que
+         * terminó hace media hora.
+         *
+         * Y se late en los dos bordes, no solo al soltarlo: sin el latido de
+         * arriba, un encargo más corto que el pulso —el Prado saltado por
+         * checkpoint dura 1 s— pasaba entero sin que la pantalla llegara a
+         * decir «ocupado». Un panel que se salta lo que pasa deprisa es el
+         * mismo problema del log del 28, en pequeño.
+         */
+        encargoActual = job.id;
+        await seguirAqui(db);
+        try {
+          await ejecutar(db, job);
+        } finally {
+          encargoActual = null;
+          await seguirAqui(db);
+        }
         if (unaVez) break;
         continue;
       }

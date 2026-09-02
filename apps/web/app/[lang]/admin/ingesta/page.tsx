@@ -31,6 +31,14 @@ interface Job {
   run_id: number | null;
 }
 
+interface Trabajador {
+  host: string;
+  pid: number | null;
+  started_at: string;
+  last_seen: string;
+  job_id: number | null;
+}
+
 interface Run {
   id: number;
   started_at: string;
@@ -102,6 +110,18 @@ export default async function IngestaPage({ params }: Props) {
 
   const encargos = (rawJobs ?? []) as Job[];
   const activo = encargos.find((j) => j.status === 'running' || j.status === 'queued');
+
+  /*
+   * ¿Hay alguien al otro lado? Es la primera pregunta de esta pantalla y hasta
+   * ahora no tenía respuesta: `jobs.heartbeat_at` solo late mientras se ejecuta
+   * algo, así que un trabajador esperando y un trabajador apagado se veían
+   * igual. Quien pulsara un botón con el ordenador de casa apagado veía su
+   * encargo «en cola» sin ninguna explicación.
+   */
+  const { data: rawWorkers } = await db.from('workers')
+    .select('*').order('last_seen', { ascending: false }).limit(5);
+
+  const trabajadores = (rawWorkers ?? []) as Trabajador[];
 
   const { data: rawRuns } = await db.from('ingest_runs')
     .select('*').order('started_at', { ascending: false }).limit(1);
@@ -179,15 +199,12 @@ export default async function IngestaPage({ params }: Props) {
 
       <section>
         <h2>Pedir un trabajo</h2>
-        <p className="muted small" style={{ margin: '8px 0 0' }}>
-          Lo ejecuta el trabajador de casa, no la web. Si no hay ninguno escuchando, el
-          encargo espera en la cola hasta que lo haya: <code>npm run worker</code>.
-        </p>
+        <Trabajadores lista={trabajadores} />
 
         <ul className="findings">
           <Encargo
             titulo="Añadir o actualizar un museo"
-            pie="El identificador de Wikidata del museo, como Q160112 para el Prado."
+            pie="El identificador de Wikidata del museo, como Q160112 para el Prado. Si no lo tenemos todavía, se añade."
             kind="ingest" accion={encargar}
           >
             <input className="campo" name="museum" placeholder="Q160112" required
@@ -198,7 +215,7 @@ export default async function IngestaPage({ params }: Props) {
 
           <Encargo
             titulo="Barrido completo"
-            pie="Los 48 museos. Horas de trabajo: se puede parar y se reanuda por donde iba."
+            pie="Todos los museos que conocemos. Horas de trabajo: se puede parar y se reanuda por donde iba."
             kind="ingest" accion={encargar}
           >
             <Casilla name="everything" etiqueta="todo lo que exista" />
@@ -392,6 +409,67 @@ function Estado({ estado }: { estado: string }) {
 
 function Fact({ k, v }: { k: string; v: string }) {
   return <li><span className="k">{k}</span><span>{v}</span></li>;
+}
+
+/**
+ * Cuánto puede tardar un latido antes de que demos por ido al trabajador.
+ *
+ * Late cada 10 s; un minuto da margen para seis latidos perdidos, que es
+ * bastante más de lo que cuesta un parpadeo de la red. El precio es el de
+ * siempre y es el correcto: cerrar la ventana del trabajador tarda hasta un
+ * minuto en verse aquí. **Equivocarse hacia «creo que sigue» durante un minuto
+ * es mucho más barato que decir «no hay nadie» mientras trabaja.**
+ */
+const MARGEN_LATIDO_MS = 60_000;
+
+/**
+ * ¿Hay alguien escuchando?
+ *
+ * No hay columna de estado que leer, y es deliberado: **estar vivo no es un
+ * estado que se escriba, es una fecha que envejece.** Un proceso que muere de
+ * golpe no actualiza ningún `status`, que es exactamente cómo el panel del 28
+ * de agosto dijo «va bien» durante catorce horas. Un `last_seen` no puede
+ * mentir en esa dirección.
+ */
+function Trabajadores({ lista }: { lista: Trabajador[] }) {
+  const vivos = lista.filter(
+    (t) => Date.now() - new Date(t.last_seen).getTime() < MARGEN_LATIDO_MS,
+  );
+
+  const comoArrancarlo = (
+    <>
+      {' '}Para arrancarlo: doble clic en <code>trabajador.cmd</code>, en la máquina de
+      casa, y dejar la ventana abierta.
+    </>
+  );
+
+  if (vivos.length === 0) {
+    const ultimo = lista[0];
+    return (
+      <p className="muted small" style={{ margin: '8px 0 0' }}>
+        <span className="sev sev-warning">nadie escuchando</span>{' '}
+        {ultimo
+          ? <>El último fue <strong>{ultimo.host}</strong>, {hace(ultimo.last_seen)}.</>
+          : <>Ningún trabajador ha dado señales todavía.</>}
+        {' '}Se puede encargar igual —la cola no pierde nada— pero no se hará hasta que
+        haya uno.{comoArrancarlo}
+      </p>
+    );
+  }
+
+  return (
+    <p className="muted small" style={{ margin: '8px 0 0' }}>
+      <span className="sev sev-live">escuchando</span>{' '}
+      {vivos.map((t) => (
+        <span key={t.host}>
+          <strong>{t.host}</strong>
+          {t.job_id ? <> · ocupado con el encargo #{t.job_id}</> : <> · libre</>}
+          {' '}(señal {hace(t.last_seen)})
+        </span>
+      ))}
+      . Lo ejecuta esa máquina, no la web.
+    </p>
+  );
 }
 
 /** Las opciones con las que se pidió, en corto. */

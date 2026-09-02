@@ -12,9 +12,12 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import { createDb, refreshCounters } from './db.js';
 import { DEFAULT_OPTIONS, ingestAll, SIN_CIFRAS, type PipelineOptions } from './pipeline.js';
 import { RunLog } from './run-log.js';
+import { fetchEntityLabel, fetchInstitution } from './sources/wikidata.js';
 import { retryCount } from './util/http.js';
 import type { MuseumSeed } from './types.js';
 
@@ -91,8 +94,10 @@ Artlas · ingesta de obras de arte
   npm run ingest -- [opciones]
 
 Opciones
-  -m, --museum <QID>        Ingerir solo este museo (repetible)
-      --all                 Todos los museos de la semilla (por defecto)
+  -m, --museum <QID>        Ingerir solo este museo (repetible). Si no lo
+                            conocemos, se le pregunta a Wikidata quién es.
+      --all                 Todos los museos conocidos: la semilla más los que
+                            ya estén en el catálogo (por defecto)
       --min-notability <n>  Mínimo de enlaces a Wikipedia. Por defecto ${DEFAULT_OPTIONS.minNotability}.
                             0 = todo (cientos de miles); 5 = catálogo curado;
                             15 = solo obras muy célebres.
@@ -124,6 +129,130 @@ async function loadSeed(): Promise<MuseumSeed[]> {
       'No se encuentra data/museums.seed.json. Genéralo con: npx tsx src/build-seed.ts',
     );
   }
+}
+
+/**
+ * Los museos que ya están en el catálogo.
+ *
+ * La semilla es la lista de ARRANQUE, no el censo: un museo añadido desde el
+ * panel entra en la base pero no en el fichero, y si el barrido solo mirase el
+ * fichero se lo saltaría para siempre. Leyéndolos de aquí, añadir un museo deja
+ * de ser un commit.
+ *
+ * Que no se pueda leer no puede impedir una ingesta: se avisa y se sigue con la
+ * semilla, que es la misma regla que gobierna `run-log.ts` —contar nunca tumba
+ * lo que se está contando.
+ */
+async function museosDelCatalogo(db: SupabaseClient | null): Promise<MuseumSeed[]> {
+  if (!db) return []; // en simulación no se le pregunta nada a la base
+
+  const { data, error } = await db
+    .from('institutions')
+    .select('wikidata_qid, name')
+    .not('wikidata_qid', 'is', null)
+    .order('id');
+
+  if (error) {
+    console.warn(`  (no se ha podido leer la lista de museos del catálogo: ${error.message})`);
+    return [];
+  }
+
+  return (data ?? []).map((r) => ({ qid: r.wikidata_qid as string, name: r.name as string }));
+}
+
+/**
+ * Un museo que no conocemos de nada: se le pregunta a Wikidata quién es.
+ *
+ * Esto es lo que convierte «añadir un museo» en algo que se pide desde el panel
+ * y no en un commit. Antes, un QID que no estuviera en la semilla moría con
+ * «Ningún museo coincide», así que el formulario que dice «Añadir o actualizar
+ * un museo» solo sabía actualizar.
+ *
+ * Se comprueba ANTES de abrir la ejecución, y por eso paga una consulta que el
+ * pipeline volverá a hacer: un identificador equivocado tiene que fallar en un
+ * segundo y con un mensaje que se entienda, no dejar una ejecución abierta con
+ * un museo fantasma dentro.
+ */
+async function museoNuevo(qid: string): Promise<MuseumSeed> {
+  if (!/^Q[1-9][0-9]*$/.test(qid)) {
+    throw new Error(
+      `«${qid}» no es un identificador de Wikidata. Es una Q seguida de números, ` +
+      'como Q160112 (Museo del Prado).',
+    );
+  }
+
+  console.log(`${qid} no está en el catálogo: preguntando a Wikidata quién es…`);
+
+  /*
+   * Primero la pregunta barata: ¿existe? Un QID inventado por SPARQL cuesta
+   * medio minuto y muere con «504 Gateway Timeout»; por aquí, 0,4 s y un
+   * mensaje que dice qué hacer.
+   */
+  const etiqueta = await fetchEntityLabel(qid);
+  if (etiqueta === null) {
+    throw new Error(
+      `Wikidata no tiene ninguna entidad con el identificador ${qid}. ` +
+      `Compruébalo en https://www.wikidata.org/wiki/${qid}`,
+    );
+  }
+
+  const ficha = await fetchInstitution(qid);
+
+  if (!ficha) {
+    throw new Error(
+      `${etiqueta} (${qid}) existe en Wikidata pero no ha devuelto sus datos de museo. ` +
+      'Puede ser que no sea una institución, o que Wikidata no esté respondiendo ahora ' +
+      'mismo: vuelve a pedirlo en un rato.',
+    );
+  }
+
+  /*
+   * Sin coordenadas no puede entrar, y hay que decirlo aquí. El pipeline
+   * también lo comprueba, pero allí es un museo omitido dentro de un barrido;
+   * aquí es la única respuesta a «añade este museo», y tiene que explicar qué
+   * le falta a quien lo ha pedido.
+   */
+  if (ficha.lat === undefined) {
+    throw new Error(
+      `${ficha.name} (${qid}) no tiene coordenadas en Wikidata (P625), así que sus ` +
+      'obras no podrían salir en el mapa, que es el producto. Añádeselas en ' +
+      'Wikidata y vuelve a pedirlo.',
+    );
+  }
+
+  console.log(`  → museo nuevo: ${ficha.name} (${ficha.city ?? '?'}, ${ficha.country ?? '?'})`);
+  return { qid, name: ficha.name };
+}
+
+/**
+ * Qué museos se van a ingerir.
+ *
+ * Sin `--museum`, todos los que conocemos: la semilla más los que ya están en
+ * el catálogo. Con `--museum`, los pedidos, resolviendo contra Wikidata los que
+ * no conozcamos.
+ *
+ * La semilla gana en el empate porque es la única que sabe si el museo tiene
+ * conector propio (`api`), y perder eso silenciosamente dejaría al Met sin su
+ * segunda pasada.
+ */
+async function resolverMuseos(
+  pedidos: string[] | undefined,
+  db: SupabaseClient | null,
+): Promise<MuseumSeed[]> {
+  const conocidos = new Map<string, MuseumSeed>();
+
+  for (const m of await loadSeed()) conocidos.set(m.qid, m);
+  for (const m of await museosDelCatalogo(db)) {
+    if (!conocidos.has(m.qid)) conocidos.set(m.qid, m);
+  }
+
+  if (!pedidos) return [...conocidos.values()];
+
+  const museos: MuseumSeed[] = [];
+  for (const qid of pedidos) {
+    museos.push(conocidos.get(qid) ?? (await museoNuevo(qid)));
+  }
+  return museos;
 }
 
 /**
@@ -175,18 +304,15 @@ async function main() {
 
   const options: PipelineOptions = { ...DEFAULT_OPTIONS, ...args.options };
 
-  const seed = await loadSeed();
-  const museums = args.museums
-    ? seed.filter((m) => args.museums!.includes(m.qid))
-    : seed;
-
-  if (museums.length === 0) {
-    throw new Error(`Ningún museo coincide con: ${args.museums?.join(', ')}`);
-  }
-
   // En dry-run ni siquiera pedimos credenciales: sirve para probar los
   // conectores sin tener Supabase montado.
   const db = options.dryRun ? null : createDb();
+
+  const museums = await resolverMuseos(args.museums, db);
+
+  if (museums.length === 0) {
+    throw new Error('No hay ningún museo que ingerir.');
+  }
 
   console.log(`Artlas · ingesta de ${museums.length} museo(s)`);
   console.log(

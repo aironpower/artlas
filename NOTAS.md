@@ -28,7 +28,7 @@ directa de estados):
 | Museos | **48 de 48**, en 34 ciudades |
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
-| Migraciones | `0001`–`0042` · **42 aplicadas, 0 pendientes** |
+| Migraciones | `0001`–`0043` · **43 aplicadas, 0 pendientes** |
 | Espacio | **406,5 MB** de los 500 del plan gratuito (81,3%) |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
@@ -53,25 +53,26 @@ hueco libre del tamaño de la tabla.
 
 ### 1. La ingesta de museos, delegable
 
-El panel `/es/admin/ingesta` ya pide trabajos y los sigue, pero **no sirve
-todavía para añadir un museo que no esté en la semilla**, que es justo lo que
-haría falta para que esto lo pudiera hacer otra persona. Dos huecos concretos:
+**Los dos huecos de código se cerraron el 2 de septiembre** —desde el panel se
+puede añadir un museo que no esté en la semilla, y la pantalla dice si hay
+trabajador escuchando—. Tienen su sección en el historial.
 
-- **`cli.ts` filtra `data/museums.seed.json` por QID**, así que un museo nuevo
-  muere con «Ningún museo coincide». El formulario dice «Añadir o actualizar un
-  museo» y hoy solo actualiza. La pieza que falta ya existe:
-  `fetchInstitution(qid)` en `sources/wikidata.ts` trae nombre, coordenadas,
-  ciudad, país y web en los tres idiomas. Lo que hay que decidir es que **la
-  lista de museos deje de ser un fichero del repo**: mientras sea un JSON
-  versionado, añadir un museo es un commit, y eso no se delega.
-- **El panel no dice si hay trabajador escuchando.** Solo enseña «Última señal»
-  cuando ya hay una ingesta corriendo, así que quien pulse con el trabajador
-  apagado ve su encargo en cola sin ninguna explicación.
+**Lo que falta para poder delegarlo de verdad no es código:**
 
-Y una tercera cosa que no es código: **un museo nuevo no está hecho cuando acaba
-la ingesta**, sino cuando alguien repasa su ficha en `/es/admin/catalogo`
-—ciudad, país, nombre en es/en/fr—. Para delegarlo, eso tiene que ser una lista
-guiada en pantalla y no algo que sepa solo Manuel.
+- **Un museo nuevo no está hecho cuando acaba la ingesta**, sino cuando alguien
+  repasa su ficha en `/es/admin/catalogo` —ciudad, país, nombre en es/en/fr—.
+  Hoy eso es algo que sabe Manuel y no dice ninguna pantalla. Para delegarlo
+  tiene que ser una lista guiada: qué mirar, en qué orden, y cómo se marca un
+  museo como revisado.
+- **Hay que teclear el QID.** Quien no sepa qué es Wikidata no sabe de dónde
+  sacarlo. Buscar el museo por su nombre desde el propio formulario —lo que ya
+  hace `build-seed.ts` con `wbsearchentities`— quitaría el único paso que
+  todavía pide saber cómo funciona esto por dentro.
+- **Un rol.** El panel es `requireAdmin` a secas: delegar hoy es hacer
+  administrador a otra persona, con todo lo que eso abre.
+
+Y el aviso que no se puede olvidar antes de invitar a nadie: **quedan ~98 MB**,
+unas 105.000 obras. Un museo grande se los come.
 
 ### 2. Cabos conocidos, de un rato cada uno
 

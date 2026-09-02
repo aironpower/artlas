@@ -18,7 +18,8 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
-| 2 de septiembre de 2026 | Buscar se caía; los títulos en minúscula; el scroll en la ficha de museo; elegir punto en el mapa |
+| 2 de septiembre de 2026 (tarde) | Añadir un museo desde el panel; el trabajador dice si está escuchando; NOTAS partido en dos |
+| 2 de septiembre de 2026 (mañana) | Buscar se caía; los títulos en minúscula; el scroll en la ficha de museo; elegir punto en el mapa |
 | 1 de septiembre de 2026 | Ingesta incremental; la época de los movimientos; «cerca de mí»; la pantalla de entrar; las imágenes; llegar a las páginas; cuentas y favoritos |
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
@@ -26,7 +27,128 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 ---
 
-## 2 de septiembre de 2026
+## 2 de septiembre de 2026 (tarde): añadir un museo sin pasar por aquí
+
+Manuel preguntó si se podría ingerir un museo desde una vista de administrador
+«así no tendría que conectarme por aquí, y lo podría hacer otra persona». Casi
+todo estaba construido desde el 29 de agosto —el buzón, el trabajador, el panel
+que sigue el encargo— y faltaban dos piezas concretas, las dos por el mismo
+motivo: **nadie había intentado usarlo desde fuera.**
+
+### El formulario decía «Añadir un museo» y solo sabía actualizar
+
+`cli.ts` filtraba `data/museums.seed.json` por QID, así que un identificador que
+no estuviera entre esos 48 moría con «Ningún museo coincide». Pedir un museo
+nuevo desde el panel era imposible por diseño, y el botón no lo decía.
+
+**El arreglo resultó pequeño porque `MuseumSeed` es solo `{ qid, name }`**: el
+resto —coordenadas, ciudad, país, web, los tres idiomas— lo pide el pipeline a
+Wikidata por su cuenta con `fetchInstitution()`. O sea que un museo desconocido
+no necesita una ficha, necesita un nombre para los mensajes.
+
+Ahora `resolverMuseos()` mira tres sitios en este orden:
+
+1. **La semilla**, que gana siempre en el empate, porque es la única que sabe si
+   el museo tiene conector propio (`api`). Perder eso en silencio dejaría al Met
+   sin su segunda pasada.
+2. **El catálogo** (`institutions`), que es lo que convierte esto en definitivo:
+   un museo añadido desde el panel entra en la base pero no en el fichero, y si
+   `--all` solo mirase el fichero se lo saltaría **para siempre**. La semilla
+   pasa a ser la lista de arranque, no el censo. Añadir un museo deja de ser un
+   commit, que era la condición para poder delegarlo.
+3. **Wikidata**, si no lo conocemos de nada.
+
+### Los treinta segundos de «504 Gateway Timeout»
+
+Preguntarle a WDQS por un QID inventado no falla rápido: reintenta cuatro veces
+y muere en medio minuto con **«504 Gateway Timeout»**, que es exactamente lo que
+vería quien se equivoca de número en el formulario. Un mensaje que no dice qué
+hacer, después de treinta segundos esperando.
+
+De ahí `fetchEntityLabel()`, que pregunta por la API de entidades en vez de por
+SPARQL. Medido:
+
+```
+  QID inventado, por SPARQL ......  30 s   →  «504 Gateway Timeout»
+  QID inventado, por la API ......  1,6 s  →  «Wikidata no tiene ninguna entidad
+                                               con el identificador Q999999999»
+```
+
+Y sobre todo **distingue tres cosas que piden respuestas distintas**: el
+identificador no existe (corrígelo), existe pero no devuelve datos de museo
+(quizá no sea una institución, o Wikidata no contesta ahora: reinténtalo), y
+existe pero no tiene coordenadas —`P625`— así que sus obras no podrían salir en
+el mapa, que es el producto. Ese último caso el pipeline ya lo comprobaba, pero
+allí es un museo omitido dentro de un barrido; aquí es la única respuesta a
+«añade este museo» y tiene que explicar qué le falta.
+
+Comprobado en vivo contra Wikidata, con `--dry-run`: el Museo Picasso Málaga
+(`Q1368396`), que no está en la semilla, se resuelve solo — «museo nuevo: Museo
+Picasso Málaga (Málaga, Spain)».
+
+### Y el panel no sabía decir si había alguien al otro lado
+
+El segundo hueco era peor, porque no daba ningún error: se pulsa «Encargar» con
+el ordenador de casa apagado, el encargo se queda en «esperando» —correctamente,
+el buzón no pierde nada— y la pantalla no dice por qué ni hasta cuándo. Quien no
+sepa que existe un `trabajador.cmd` en un ordenador de Madrid no tiene forma de
+averiguarlo. `jobs.heartbeat_at` no servía: late solo mientras se ejecuta algo,
+así que **un trabajador esperando y un trabajador apagado se veían igual**.
+
+Migración **0043**, tabla `workers`. La decisión de fondo es la misma que dejó
+escrita el 28 de agosto y que ya gobierna `reap_dead_runs()`:
+
+> **Estar vivo no es un estado que se escriba, es una fecha que envejece.**
+
+Por eso la tabla no tiene ni `status` ni función de barrido: no hay nada que
+enterrar. Un proceso que muere de golpe no actualiza ningún `status` —así fue
+como el panel dijo «va bien» durante catorce horas— pero un `last_seen` no puede
+mentir en esa dirección: si nadie lo toca, envejece solo y quien lo lee saca su
+conclusión.
+
+Tres decisiones pequeñas, cada una con su porqué:
+
+- **La clave es la máquina, no el pid.** `trabajador.cmd` relanza el proceso a
+  los diez segundos si se cae; con el pid como clave, un mes de reinicios serían
+  mil filas para decir lo que dice una.
+- **Late cada 10 s y el panel perdona hasta 60.** Seis latidos de margen para un
+  parpadeo de red. El precio es que cerrar la ventana tarda hasta un minuto en
+  verse, y es el lado correcto en el que equivocarse: decir «no hay nadie»
+  mientras trabaja es mucho peor que decir «creo que sigue» durante un minuto.
+- **Anotar el latido no puede tumbar al trabajador.** Misma regla que
+  `run-log.ts`: se avisa una vez, se sigue, y el aviso dice que el panel se
+  quedó ciego.
+
+### Comprobado por el camino del usuario, no solo compilado
+
+Con el panel abierto en un navegador de verdad y sesión de administrador
+(`ver-panel.mjs`), rellenando el formulario y pulsando el botón:
+
+- Con el trabajador encendido: **«ESCUCHANDO · Computop · libre (señal hace
+  10 s)»**.
+- Encargado el Prado desde el formulario: el trabajador lo coge **en menos de
+  5 s**, la ingesta lo salta por checkpoint —«ya estaba», 0 filas escritas, 1 s—
+  y el encargo queda en «HECHO». La cadena entera, sin tocar el catálogo.
+- Apagado el trabajador: al minuto justo, **«NADIE ESCUCHANDO · el último fue
+  Computop, hace 1 min»**, con qué hacer para arrancarlo.
+
+**Y esa prueba encontró un fallo de verdad.** El primer latido tras coger un
+encargo era el del pulso, a los 10 s, así que un encargo más corto que el pulso
+—el Prado saltado dura 1 s— pasaba entero sin que la pantalla llegara a decir
+«ocupado». Ahora late en los dos bordes, al coger y al soltar. Es el problema
+del log del 28 en pequeño: un panel que se salta lo que pasa deprisa.
+
+### Lo que este día NO hace, a propósito
+
+**No se ha metido ningún museo nuevo en el catálogo.** Eso cambia lo que ve
+cualquiera que entre en artlas.softie.dev y se come parte de los ~98 MB que
+quedan, así que es decisión de Manuel y no efecto secundario de una prueba. El
+camino está comprobado con un museo que ya estaba y con una simulación contra
+Wikidata del que no.
+
+---
+
+## 2 de septiembre de 2026 (mañana)
 
 Cuatro cosas de Manuel, y la última era un fallo en producción.
 
