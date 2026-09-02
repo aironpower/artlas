@@ -18,6 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 3 de septiembre de 2026 | Buscar dentro del radio; lista y orden; «Buscador»; el header en el móvil; las minúsculas |
 | 2 de septiembre de 2026 (noche) | El museo se busca por su nombre; 200 km en el radio del mapa |
 | 2 de septiembre de 2026 (tarde) | Añadir un museo desde el panel; el trabajador dice si está escuchando; NOTAS partido en dos |
 | 2 de septiembre de 2026 (mañana) | Buscar se caía; los títulos en minúscula; el scroll en la ficha de museo; elegir punto en el mapa |
@@ -25,6 +26,124 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 3 de septiembre de 2026: buscar dentro del radio
+
+Manuel trajo nueve cosas de una vez. Aquí están las cinco que se hicieron; las
+otras cuatro —compartir favoritos, fichas de artista, país del pintor, autores
+relacionados— quedaron escritas en `NOTAS.md` con lo que hay que medir antes de
+prometerlas.
+
+### «Ninguna coincide» sobre novecientas sin mirar
+
+La petición era «cuando clico en el mapa quiero un buscador también entre esos
+cuadros». La forma barata —filtrar en el navegador lo que ya está traído— se
+escribió, se probó, y se cayó a la primera: escribir «picasso» con 50 km de
+Barcelona devolvía cero.
+
+Y era verdad *dentro de las sesenta*. Medido contra el catálogo:
+
+| | Obras dentro |
+|---|---|
+| Barcelona, 5 km | ≥ 1.000 |
+| Madrid, 1 km | 587 |
+| París, 5 km | ≥ 1.000 |
+
+`artworks_near` devuelve 60. Filtrarlas en memoria es contestar «no hay» sobre
+novecientas que no se han mirado — la misma mentira que un círculo pintado más
+grande que el radio preguntado, que es un error que este proyecto ya cometió una
+vez. Así que el texto tenía que ir a la consulta, y eso es la migración `0044`.
+
+Antes de escribirla se midieron tres formas del filtro contra el presupuesto
+real —los 3 s del `statement_timeout` del rol `anon`—:
+
+|  | solo título | + artista | + traducción |
+|---|---|---|---|
+| Barcelona, 50 km | 395 ms | 41 ms | 54 ms |
+| Nueva York, 5 km | 2.426 ms | 299 ms | 991 ms |
+| Madrid, 200 km | 872 ms | 311 ms | 406 ms |
+
+Cabe la completa con holgura, así que se coge la completa: buscar solo en
+`artworks.title` dejaría fuera a quien escribe el título en su idioma y a quien
+escribe el nombre del pintor, que es como busca la gente.
+
+**Que buscar por más columnas salga más barato que por menos** no es un error de
+lectura. `artworks_title_trgm` es parcial sobre `published` y llevaba desde
+siempre con `idx_scan = 0` —25 MB que no usaba nadie, apuntados en NOTAS como
+peso muerto—; en cuanto la condición se combina con `artists_name_trgm` el
+planificador escoge otro camino. Esta consulta es su primer usuario.
+
+El filtro va **dentro del paso 1**, junto al de movimiento y por su mismo
+motivo, que `0040` ya dejó escrito: aplicado después del `limit 60` devolvería
+lo que quedara de las 60 primeras, no las 60 que coinciden.
+
+### Un fallo que solo aparece escribiendo
+
+Con el filtro puesto, teclear era imposible: se escribía una letra y el cursor
+se salía de la caja. La causa estaba en la forma del estado —`{ fase: 'listo',
+works }`—, porque cada tecla pasaba por `buscando`, y la condición de pintado
+`estado.fase === 'listo'` desmontaba la sección entera. Con ella se iban el foco
+y el modo lista recién elegido.
+
+Separadas las dos cosas —la fase por un lado, las obras por otro— la sección se
+queda montada y lo de antes sigue en pantalla, atenuado, mientras llega lo de
+ahora. `null` es «todavía no se ha preguntado»; una lista vacía es una
+respuesta.
+
+Esto no lo habría visto un typecheck ni un build. Apareció al escribir en la
+caja con un navegador de verdad.
+
+### Modo lista, y ordenar
+
+La lista es una tabla con las columnas que se pueden ordenar pulsándolas —obra,
+artista, museo, fecha, distancia—, y un desplegable que hace lo mismo para quien
+esté en rejilla. **El orden se queda en el navegador y el texto va al servidor**,
+y no es una simetría bonita: ordenar solo toca lo que ya está en pantalla, así
+que una ida y vuelta sería más lenta para el mismo resultado.
+
+Los nulos van siempre al final, en los dos sentidos: ordenar por autor y que lo
+primero sean quince «—» es ordenar por lo que no se sabe.
+
+De paso, una mentira que llevaba ahí desde el principio: el recuento decía «las
+60 más cercanas» y `artworks_near` ordena por **notabilidad**, no por distancia.
+Ahora dice «las 60 más destacadas de este radio».
+
+### «Buscador», y el header del móvil
+
+En una fila de sustantivos —Museos, Artistas, Movimientos— «Buscar» se lee como
+un botón, y aquello es un sitio al que se va. Con la sección ya nombrada, la
+caja de la barra de arriba sale en el teléfono: allí competía por el ancho con
+el logo y los tres idiomas —le quedaban unos 40 px y su botón ya estaba
+escondido—. Se quita la media caja, no la función.
+
+### Las minúsculas, contadas
+
+«Sigo viendo mucho texto que empieza por minúsculas.» Lo estaba, y se midió
+antes de tocar nada:
+
+| | Con valor | En minúscula |
+|---|---|---|
+| `artwork_translations.medium` | 105.750 | **104.621** |
+| `artwork_translations.genre` | 62.814 | **62.576** |
+| `artwork_translations.description` | 149.366 | **147.783** |
+| `artist_translations.description` | 53.757 | **34.307** |
+| `artwork_translations.title` | 152.185 | 574 |
+
+Los títulos ya estaban arreglados —y por eso solo se veía en técnica, género y
+descripciones—. En Wikidata esos campos son etiquetas de concepto («oil paint»,
+«portrait»), no frases; en una ficha son frases.
+
+Se arregla **al leer**, como los títulos, y no reescribiendo la base: son
+~315.000 filas entre las tres columnas, y reescribirlas deja filas muertas
+ocupando hasta que pase el autovacuum, con el plan al 81,3%.
+
+Dos sitios se habían quedado fuera de la regla por leer con un `select` propio
+en vez de por `data.ts`: la ficha de museo —nombre, ciudad, país y descripción—
+y la nacionalidad en la lista de artistas. En esa última la mayúscula es **solo
+de la etiqueta**: el `value` del desplegable viaja a la consulta y tiene que
+seguir siendo el texto exacto de Wikidata.
 
 ---
 

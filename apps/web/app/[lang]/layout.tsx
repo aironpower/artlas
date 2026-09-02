@@ -70,7 +70,13 @@ export default async function LangLayout(
           <Link href={path(lang, 'museums')}>{t(lang, 'museums')}</Link>
           <Link href={path(lang, 'artists')}>{t(lang, 'artists')}</Link>
           <Link href={path(lang, 'movements')}>{t(lang, 'movements')}</Link>
-          <Link href={path(lang, 'search')}>{t(lang, 'searchAction')}</Link>
+          {/*
+            * «Buscador» y no «Buscar»: en una fila de sustantivos —Museos,
+            * Artistas, Movimientos— un verbo se lee como un botón, y esto es
+            * un sitio al que se va. La caja de arriba sigue siendo «Buscar»,
+            * que ahí sí es la acción.
+            */}
+          <Link href={path(lang, 'search')}>{t(lang, 'searchSection')}</Link>
 
           <span className="grow" />
 

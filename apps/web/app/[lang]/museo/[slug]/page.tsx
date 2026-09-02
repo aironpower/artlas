@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { isLang, t, formatNumber } from '@/lib/i18n';
+import { isLang, t, formatNumber, capitalize } from '@/lib/i18n';
 import { supabase, artworksByInstitution } from '@/lib/data';
 import { path } from '@/lib/routes';
 import ArtworkGrid, { TarjetasObra } from '@/components/ArtworkGrid';
@@ -39,9 +39,15 @@ export default async function MuseumPage({ params, searchParams }: Props) {
   const tr = (inst.institution_translations ?? []) as { lang: string; name: string; city: string | null; country: string | null; description: string | null }[];
   const text = tr.find((r) => r.lang === lang) ?? tr.find((r) => r.lang === 'en') ?? tr[0];
 
-  const name = text?.name ?? inst.name;
-  const city = text?.city ?? inst.city;
-  const country = text?.country ?? inst.country;
+  /*
+   * Con mayúscula inicial, como en el resto del sitio. Esta página se lee con
+   * un `select` propio y no por `data.ts`, así que se quedó fuera de la regla
+   * que ya arreglaba los títulos: la descripción del museo llegaba de Wikidata
+   * en minúscula y se pintaba tal cual bajo el nombre.
+   */
+  const name = capitalize(text?.name ?? inst.name);
+  const city = text?.city ? capitalize(text.city) : inst.city;
+  const country = text?.country ? capitalize(text.country) : inst.country;
 
   // El punto sigue viniendo del mapa; las obras, ya no. Se piden por museo
   // (0023) para poder paginarlas y para que la lista cuadre con el contador.
@@ -73,7 +79,7 @@ export default async function MuseumPage({ params, searchParams }: Props) {
           {formatNumber(lang, inst.artwork_count)} {t(lang, 'artworks')}
           {inst.rating_count > 0 && ` · ★ ${inst.rating_avg}`}
         </p>
-        {text?.description && <p className="muted">{text.description}</p>}
+        {text?.description && <p className="muted">{capitalize(text.description)}</p>}
         {inst.website && (
           <p className="small">
             <a href={inst.website} target="_blank" rel="noopener noreferrer">{inst.website} ↗</a>

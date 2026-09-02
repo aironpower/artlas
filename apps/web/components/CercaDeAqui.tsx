@@ -22,11 +22,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import WorldMap from './WorldMap';
+import ObrasAlrededor from './ObrasAlrededor';
 import type { MapPin, NearbyArtwork } from '@/lib/data';
-import { formatDistance, t, type Lang } from '@/lib/i18n';
-import { path } from '@/lib/routes';
+import { t, type Lang } from '@/lib/i18n';
 
 interface Punto { lng: number; lat: number }
 
@@ -45,17 +44,30 @@ const RADIOS = [
   { m: 200_000, zoom: 6 },
 ] as const;
 
+/*
+ * Las obras NO viven dentro del estado, y ese fue un fallo que solo se vio
+ * escribiendo en la caja: con `{ fase: 'listo', works }`, cada tecla pasaba
+ * por `buscando`, la sección entera se desmontaba y volvía, y con ella se iban
+ * el foco del cursor y el modo lista que se acabara de elegir. Buscar era
+ * imposible: se escribía una letra y el teclado se cerraba.
+ *
+ * Separadas, la fase dice si hay algo en vuelo y las obras siguen en pantalla
+ * mientras tanto. `null` es «todavía no se ha preguntado»; una lista vacía es
+ * una respuesta.
+ */
 type Estado =
   | { fase: 'quieto' }
   | { fase: 'buscando' }
   | { fase: 'sinPermiso' }
-  | { fase: 'listo'; works: NearbyArtwork[] };
+  | { fase: 'listo' };
 
 export default function CercaDeAqui({ lang, pins }: { lang: Lang; pins: MapPin[] }) {
   const [punto, setPunto] = useState<Punto | null>(null);
   const [radio, setRadio] = useState<number>(15_000);
   const [estado, setEstado] = useState<Estado>({ fase: 'quieto' });
+  const [works, setWorks] = useState<NearbyArtwork[] | null>(null);
   const [texto, setTexto] = useState('');
+  const [filtro, setFiltro] = useState('');
   const [sinLugar, setSinLugar] = useState(false);
   const [volarA, setVolarA] = useState<{ lng: number; lat: number; zoom: number } | null>(null);
 
@@ -69,33 +81,54 @@ export default function CercaDeAqui({ lang, pins }: { lang: Lang; pins: MapPin[]
    */
   const turno = useRef(0);
 
-  const pedirObras = useCallback(async (p: Punto, metros: number) => {
+  const pedirObras = useCallback(async (p: Punto, metros: number, q = '') => {
     const mio = ++turno.current;
     setEstado({ fase: 'buscando' });
 
     try {
       const res = await fetch(
-        `/api/cerca?lat=${p.lat}&lng=${p.lng}&lang=${lang}&radio=${metros}`,
+        `/api/cerca?lat=${p.lat}&lng=${p.lng}&lang=${lang}&radio=${metros}`
+        + (q ? `&q=${encodeURIComponent(q)}` : ''),
       );
       if (!res.ok) throw new Error('cerca');
       const datos = await res.json() as { works: NearbyArtwork[] };
       if (mio !== turno.current) return;
-      setEstado({ fase: 'listo', works: datos.works });
+      setWorks(datos.works);
+      setEstado({ fase: 'listo' });
     } catch {
       if (mio !== turno.current) return;
-      setEstado({ fase: 'listo', works: [] });
+      setWorks([]);
+      setEstado({ fase: 'listo' });
     }
   }, [lang]);
 
-  // Un punto nuevo, o un radio nuevo, es una pregunta nueva.
+  /*
+   * Un punto nuevo, un radio nuevo o un texto nuevo son una pregunta nueva, y
+   * las tres se contestan igual: preguntando al servidor.
+   *
+   * El texto espera 350 ms desde la última tecla. Filtrarlo en el navegador
+   * sería instantáneo y sería mentira: dentro de 5 km de Barcelona hay más de
+   * mil obras y de aquí vienen 60, así que «ninguna coincide» se estaría
+   * diciendo sobre novecientas sin mirar. Prefiero la espera y la verdad.
+   */
   useEffect(() => {
     if (!punto) return;
-    void pedirObras(punto, radio);
-  }, [punto, radio, pedirObras]);
+
+    const q = filtro.trim();
+    if (!q) {
+      void pedirObras(punto, radio);
+      return;
+    }
+
+    const t = setTimeout(() => { void pedirObras(punto, radio, q); }, 350);
+    return () => clearTimeout(t);
+  }, [punto, radio, filtro, pedirObras]);
 
   function elegir(p: Punto, zoom?: number) {
     setSinLugar(false);
     setPunto(p);
+    setFiltro('');
+    setWorks(null);
     setVolarA({ ...p, zoom: zoom ?? zoomDe(radio) });
   }
 
@@ -139,6 +172,8 @@ export default function CercaDeAqui({ lang, pins }: { lang: Lang; pins: MapPin[]
   const alPinchar = useCallback((p: Punto) => {
     setSinLugar(false);
     setPunto(p);
+    setFiltro('');
+    setWorks(null);
     // Pinchando NO se vuela: ya estás mirando donde has pinchado, y moverte el
     // mapa bajo el dedo es lo más molesto que puede hacer un mapa.
   }, []);
@@ -183,7 +218,12 @@ export default function CercaDeAqui({ lang, pins }: { lang: Lang; pins: MapPin[]
           <button
             className="btn"
             type="button"
-            onClick={() => { setPunto(null); setEstado({ fase: 'quieto' }); }}
+            onClick={() => {
+              setPunto(null);
+              setFiltro('');
+              setWorks(null);
+              setEstado({ fase: 'quieto' });
+            }}
           >
             {t(lang, 'clearPoint')}
           </button>
@@ -206,27 +246,21 @@ export default function CercaDeAqui({ lang, pins }: { lang: Lang; pins: MapPin[]
         volarA={volarA}
       />
 
-      {punto && estado.fase === 'listo' && (
+      {punto && works !== null && (
         <section style={{ paddingTop: 22 }}>
           <h2>{t(lang, 'worksAround')}</h2>
 
-          {estado.works.length === 0 ? (
-            <p className="muted">{t(lang, 'nothingInRadius')}</p>
-          ) : (
-            <div className="grid">
-              {estado.works.slice(0, 12).map((w) => (
-                <Link key={w.id} href={path(lang, 'artwork', w.id)} className="card">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img className="card-image" src={w.image_url ?? ''} alt={w.title} loading="lazy" />
-                  <p className="card-title">{w.title}</p>
-                  <p className="card-meta">{w.artist_name}</p>
-                  <p className="card-meta small">
-                    {w.institution_name} · {formatDistance(lang, w.distance_m)} {t(lang, 'distance')}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
+          {/*
+            * El panel se pinta SIEMPRE, también sin resultados. Antes «Nada en
+            * ese radio» sustituía a la lista entera; con el filtro dentro, eso
+            * se llevaría por delante la caja donde se ha escrito y dejaría a
+            * quien busca sin manera de borrar lo que buscó.
+            */}
+          <ObrasAlrededor
+            lang={lang} works={works}
+            filtro={filtro} onFiltro={setFiltro}
+            buscando={estado.fase === 'buscando'}
+          />
         </section>
       )}
     </section>

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isLang, t, formatNumber, formatYears, type Lang } from '@/lib/i18n';
+import { isLang, t, formatNumber, formatYears, capitalize, type Lang } from '@/lib/i18n';
 import { listArtists, listNationalities } from '@/lib/data';
 import { path } from '@/lib/routes';
 import { Ordenable } from '@/components/Ordenable';
@@ -128,8 +128,10 @@ export default async function Artistas({ params, searchParams }: Props) {
         <select name="nat" defaultValue={nat ?? ''} aria-label={t(idioma, 'colNationality')}>
           <option value="">{t(idioma, 'colNationality')}: —</option>
           {nacionalidades.map((n) => (
+            /* La mayúscula es solo de la etiqueta: el `value` viaja a la
+             * consulta y tiene que seguir siendo el texto exacto de Wikidata. */
             <option key={n.nationality} value={n.nationality}>
-              {n.nationality} ({n.artists})
+              {capitalize(n.nationality)} ({n.artists})
             </option>
           ))}
         </select>
@@ -170,7 +172,9 @@ export default async function Artistas({ params, searchParams }: Props) {
               {artistas.map((a) => (
                 <tr key={a.slug}>
                   <td><Link href={path(idioma, 'artist', a.slug)}>{a.name}</Link></td>
-                  <td className="muted col-opcional">{a.nationality ?? "—"}</td>
+                  <td className="muted col-opcional">
+                    {a.nationality ? capitalize(a.nationality) : '—'}
+                  </td>
                   <td className="muted">{formatYears(idioma, a.birthYear, a.deathYear) ?? '—'}</td>
                   <td className="num">{formatNumber(idioma, a.count)}</td>
                 </tr>

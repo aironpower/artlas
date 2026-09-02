@@ -35,6 +35,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'radio inválido' }, { status: 400 });
   }
 
+  /*
+   * El texto por el que se busca dentro del radio. Se acota aquí porque llega
+   * de fuera: menos de dos letras la función lo trata como si no hubiera
+   * filtro, y más de 120 no es una búsqueda.
+   */
+  const q = (params.get('q') ?? '').trim().slice(0, 120);
+
   // Coordenadas de un tercero: se validan antes de llegar a PostGIS.
   if (!Number.isFinite(lat) || Math.abs(lat) > 90 ||
       !Number.isFinite(lng) || Math.abs(lng) > 180 ||
@@ -58,7 +65,7 @@ export async function GET(request: Request) {
 
   try {
     if (radio !== null) {
-      const works = await artworksNear(lang, lat, lng, radio);
+      const works = await artworksNear(lang, lat, lng, radio, undefined, q);
       return NextResponse.json({
         radio,
         works: works.map((w) => ({ ...w, image_url: imageUrl(w.image_url, 500) })),
@@ -66,7 +73,7 @@ export async function GET(request: Request) {
     }
 
     for (const radio of RADIOS) {
-      const works = await artworksNear(lang, lat, lng, radio);
+      const works = await artworksNear(lang, lat, lng, radio, undefined, q);
 
       if (works.length > 0 || radio === RADIOS[RADIOS.length - 1]) {
         return NextResponse.json({

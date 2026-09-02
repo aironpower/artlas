@@ -241,6 +241,13 @@ export async function artworksNear(
   lng: number,
   radiusM = 5000,
   movement?: string,
+  /*
+   * El texto se busca AQUÍ y no en el navegador. Dentro de 5 km de Barcelona
+   * hay más de mil obras y esta función devuelve 60: filtrar las 60 sería
+   * contestar «ninguna coincide» sobre novecientas que no se han mirado.
+   * La migración 0044 lo mete en el primer paso, junto al de movimiento.
+   */
+  q?: string,
 ): Promise<NearbyArtwork[]> {
   const { data, error } = await db().rpc('artworks_near', {
     lat,
@@ -249,6 +256,7 @@ export async function artworksNear(
     radius_m: radiusM,
     movement_slug: movement ?? null,
     max_results: 60,
+    search_text: q?.trim() || null,
   });
 
   if (error) throw new Error(`cercanas: ${error.message}`);
@@ -323,7 +331,10 @@ export async function getArtist(lang: Lang, slug: string): Promise<Artist | null
   const { data, error } = await db().rpc('get_artist', { p_slug: slug, p_lang: lang });
 
   if (error) throw new Error(`artista ${slug}: ${error.message}`);
-  return conInicialMayuscula((data ?? []) as Artist[], ['name'])[0] ?? null;
+  return conInicialMayuscula(
+    (data ?? []) as Artist[],
+    ['name', 'description', 'nationality'],
+  )[0] ?? null;
 }
 
 /**
@@ -391,6 +402,11 @@ function hideRestrictedImage<T extends { image_url: string | null; image_mode?: 
  * Solo la inicial, como `capitalize`: pasar la cadena entera por un `initcap`
  * destrozaría «bust of Michel de Marolles».
  */
+/** `capitalize` para un campo que puede no venir. Devuelve null tal cual. */
+function capitalizeOrNull(valor: string | null | undefined): string | null {
+  return valor ? capitalize(valor) : null;
+}
+
 function conInicialMayuscula<T>(rows: T[], campos: (keyof T)[]): T[] {
   return rows.map((row) => {
     const copia = { ...row };
@@ -487,9 +503,20 @@ function localizeArtwork(row: any, lang: Lang) {
     id: row.id as number,
     slug: row.slug as string,
     title: capitalize(text?.title ?? row.title),
-    description: text?.description ?? null,
-    medium: text?.medium ?? null,
-    genre: text?.genre ?? null,
+    /*
+     * Técnica, género y descripción vienen de Wikidata en minúscula casi
+     * siempre —104.621 de 105.750 técnicas, 62.576 de 62.814 géneros— porque
+     * allí son etiquetas de concepto («oil paint», «portrait»), no frases. En
+     * una ficha son frases, y una ficha que empieza en minúscula está mal
+     * escrita.
+     *
+     * Se arregla AL LEER, como los títulos, y no reescribiendo la base: son
+     * ~315.000 filas entre las tres columnas, y reescribirlas deja filas
+     * muertas ocupando hasta que pase el autovacuum, con el plan al 81,3%.
+     */
+    description: capitalizeOrNull(text?.description),
+    medium: capitalizeOrNull(text?.medium),
+    genre: capitalizeOrNull(text?.genre),
 
     yearStart: row.year_start as number | null,
     dateDisplay: row.date_display as string | null,
@@ -521,7 +548,7 @@ function localizeArtwork(row: any, lang: Lang) {
           id: row.artists.id as number,
           slug: row.artists.slug as string,
           name: capitalize(artistText?.name ?? row.artists.name),
-          description: artistText?.description ?? null,
+          description: capitalizeOrNull(artistText?.description),
           birthYear: row.artists.birth_year as number | null,
           deathYear: row.artists.death_year as number | null,
         }
@@ -532,8 +559,8 @@ function localizeArtwork(row: any, lang: Lang) {
           id: row.institutions.id as number,
           slug: row.institutions.slug as string,
           name: capitalize(instText?.name ?? row.institutions.name),
-          city: instText?.city ?? row.institutions.city,
-          country: instText?.country ?? row.institutions.country,
+          city: capitalizeOrNull(instText?.city ?? row.institutions.city),
+          country: capitalizeOrNull(instText?.country ?? row.institutions.country),
           website: row.institutions.website as string | null,
         }
       : null,

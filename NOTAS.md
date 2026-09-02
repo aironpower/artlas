@@ -28,7 +28,7 @@ directa de estados):
 | Museos | **48 de 48**, en 34 ciudades |
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
-| Migraciones | `0001`–`0043` · **43 aplicadas, 0 pendientes** |
+| Migraciones | `0001`–`0044` · **44 aplicadas, 0 pendientes** |
 | Espacio | **406,5 MB** de los 500 del plan gratuito (81,3%) |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
@@ -85,6 +85,10 @@ unas 105.000 obras. Un museo grande se los come.
   su momento porque había una ingesta de 121.000 obras escribiendo.
 - **Buscar y la lista de artistas siguen con botón de paginación**, mientras que
   la ficha de museo ya sigue sola al llegar abajo.
+- **Las obras del radio son 60 como mucho**, las más destacadas. Con el buscador
+  dentro ya no es una trampa —quien pregunta por un cuadro pregunta al
+  servidor—, pero recorrer las mil que hay a 5 km de Barcelona sigue sin poder
+  hacerse: haría falta paginar `artworks_near`, que hoy no acepta desplazamiento.
 - **El esqueleto de `loading.tsx` no se sustituye nunca sin JavaScript.** Es del
   streaming de Next, no nuestro, pero deja dos rejillas en el HTML.
 - **Los cuatro idiomas fantasma de `i18n.ts`** (it, de, pt, nl): el fichero dice
@@ -96,7 +100,31 @@ unas 105.000 obras. Un museo grande se los come.
 - **`ingest_runs`, `ingest_steps` y `jobs` no se borran nunca.** Son diminutas
   —unas 48 filas por barrido—; si algún día molestan, la retención es trivial.
 
-### 3. Decisiones de Manuel, no trabajo
+### 3. Lo que pidió Manuel el 3 de septiembre y no está hecho
+
+En orden de lo que cuesta averiguar, no de lo que cuesta escribir. Las tres
+primeras tocan **espacio**, y quedan ~93 MB.
+
+- **Compartir un favorito.** Hoy los favoritos son privados por política de
+  fila. Compartir uno es decidir qué se comparte —una obra suelta o la lista— y
+  con qué permiso: una URL con testigo que cualquiera abra, o solo entre
+  usuarios. Es una decisión de producto antes que una tabla.
+- **Fichas de artista al modo Smartify**: biografía, y más datos de la obra.
+  `artists.description` es la frase de una línea de Wikidata, no una biografía.
+  Una de verdad sale del extracto de Wikipedia, y **hay que medir antes de
+  prometerlo**: 21.619 artistas × un párrafo × tres idiomas es espacio, y solo
+  11.426 tienen obra publicada. Empezar por esos.
+- **País de origen del pintor, y buscar por él.** Media pieza ya existe: la
+  lista de artistas filtra por `nationality` y el desplegable lleva el recuento.
+  Falta enseñarlo en la ficha del artista y que se pueda pinchar. Ojo con lo
+  que ya está dicho más abajo: las nacionalidades vienen en inglés y muchas son
+  estados que no existen.
+- **Artistas relacionados** por país, época, museo o movimiento. Es lo último de
+  la lista a propósito: las cuatro relaciones existen ya como columnas, así que
+  el trabajo no es tenerlas sino elegir cuál manda cuando varias coinciden, y
+  eso se decide mirando ejemplos reales, no de antemano.
+
+### 4. Decisiones de Manuel, no trabajo
 
 - **¿Puede registrarse cualquiera?** Hoy sí: con un correo válido se crea perfil
   `viewer`, que no da ningún permiso. Si no se quiere, se cierra el registro
