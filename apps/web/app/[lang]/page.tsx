@@ -3,9 +3,8 @@ import Link from 'next/link';
 import { isLang, t, formatNumber } from '@/lib/i18n';
 import { path } from '@/lib/routes';
 import { mapPins, searchArtworks, countArtists } from '@/lib/data';
-import WorldMap from '@/components/WorldMap';
 import ArtworkGrid from '@/components/ArtworkGrid';
-import NearMe from '@/components/NearMe';
+import CercaDeAqui from '@/components/CercaDeAqui';
 
 // El catálogo cambia solo cuando se reingiere. Una hora de caché evita pegarle
 // a Supabase en cada visita sin que los datos se queden viejos de verdad.
@@ -47,9 +46,13 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         </p>
       </section>
 
-      <NearMe lang={lang} />
-
-      <WorldMap pins={pins} lang={lang} />
+      {/*
+        * El mapamundi y «cerca de mí» eran dos cosas separadas: un botón que
+        * daba una lista y, debajo, un mapa que no se enteraba. Ahora es una:
+        * el punto se elige con la posición, buscando un sitio o pinchando, y
+        * el mismo mapa lo dibuja con el círculo del radio.
+        */}
+      <CercaDeAqui lang={lang} pins={pins} />
 
       <section style={{ paddingTop: 34 }}>
         <h2>{t(lang, 'explore')}</h2>

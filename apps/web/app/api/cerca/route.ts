@@ -19,6 +19,22 @@ export async function GET(request: Request) {
   const lng = Number(params.get('lng'));
   const lang = params.get('lang') ?? '';
 
+  /*
+   * Radio pedido, opcional. Sin él manda el servidor y va ampliando hasta
+   * encontrar algo, que es lo que necesita «cerca de mí»: quien pulsa ese
+   * botón no ha elegido una distancia, ha preguntado qué tiene al lado.
+   *
+   * Con él NO se amplía, y esa es la diferencia que importa. Si alguien pone
+   * el círculo en 5 km y le devolviéramos obras a 300, el círculo dibujado en
+   * el mapa estaría mintiendo. Vacío dentro de 5 km es una respuesta.
+   */
+  const radioPedido = params.get('radio');
+  const radio = radioPedido === null ? null : Number(radioPedido);
+
+  if (radio !== null && (!Number.isFinite(radio) || radio < 100 || radio > 1_000_000)) {
+    return NextResponse.json({ error: 'radio inválido' }, { status: 400 });
+  }
+
   // Coordenadas de un tercero: se validan antes de llegar a PostGIS.
   if (!Number.isFinite(lat) || Math.abs(lat) > 90 ||
       !Number.isFinite(lng) || Math.abs(lng) > 180 ||
@@ -41,6 +57,14 @@ export async function GET(request: Request) {
   const RADIOS = [15_000, 60_000, 250_000, 1_000_000];
 
   try {
+    if (radio !== null) {
+      const works = await artworksNear(lang, lat, lng, radio);
+      return NextResponse.json({
+        radio,
+        works: works.map((w) => ({ ...w, image_url: imageUrl(w.image_url, 500) })),
+      });
+    }
+
     for (const radio of RADIOS) {
       const works = await artworksNear(lang, lat, lng, radio);
 

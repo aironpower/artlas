@@ -818,3 +818,44 @@ input[type='email'], input[type='password'], select { font-size: 16px; }
 /* La fila de acciones bajo el título de una obra: guardar y, para quien
    administra, corregir. */
 .acciones-ficha { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+
+/* --- Elegir un punto en el mapa --------------------------------------------
+ *
+ * Los controles van en una fila que se parte sola. En el móvil la caja del
+ * sitio ocupa el ancho entero: escribir «Museo del Prado» en un hueco de 120 px
+ * es lo que hace que nadie use un buscador.
+ */
+.cerca-controles {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 4px 0 6px;
+}
+.cerca-lugar { display: flex; gap: 8px; flex: 1 1 320px; }
+.cerca-lugar input { flex: 1 1 auto; min-width: 0; }
+.cerca-radio { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.cerca-radio select { width: auto; }
+
+/*
+ * El punto elegido: un anillo, no un disco.
+ *
+ * Con relleno tapaba la chincheta del museo justo cuando más importa —quien
+ * busca «Museo del Prado» acaba con el punto encima del Prado— y se perdía de
+ * vista el número de obras. Vacío por dentro, señala el sitio y deja ver lo
+ * que hay debajo. El borde blanco exterior es para que se lea igual sobre el
+ * agua, sobre el verde y sobre una ciudad gris.
+ */
+.punto-elegido {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: transparent;
+  border: 3px solid #c4462c;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .9), 0 0 0 3px rgba(0, 0, 0, .18);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  /* La caja ocupa la fila entera y el botón cae debajo: compartiendo ancho con
+   * «Buscar el sitio» quedaban 150 px para escribir «Museo del Prado», que es
+   * lo que hace que un buscador no se use. */
+  .cerca-lugar { flex: 1 1 100%; flex-wrap: wrap; }
+  .cerca-lugar input { flex: 1 1 100%; }
+  .cerca-controles > .btn { flex: 1 1 auto; }
+}
