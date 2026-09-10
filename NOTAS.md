@@ -159,12 +159,20 @@ Y una ruta con segmento dinámico no llega a ser ISR sin `generateStaticParams`,
 aunque tenga `revalidate`. **La prueba no es el build, es
 `.next/prerender-manifest.json`:** la ruta tiene que aparecer en `dynamicRoutes`.
 
-### 2c. La mudanza a Hetzner (decidida el 10 de septiembre)
+### 2c. Artlas ya NO está en Vercel (hecho el 10 de septiembre)
 
-**Artlas se va de Vercel.** El montaje está escrito y sin estrenar: el manual
-paso a paso es [DESPLIEGUE-VPS.md](DESPLIEGUE-VPS.md) y los ficheros están en
-`despliegue/`. Falta lo que solo puede hacer Manuel: crear la máquina, la clave
-de despliegue, el `.env` y mover el DNS.
+**Corre en un VPS de Hetzner, `<IP del servidor>`**, Debian 13, CX23. El manual
+es [DESPLIEGUE-VPS.md](DESPLIEGUE-VPS.md) y los ficheros están en `despliegue/`.
+La web y el trabajador son dos servicios de systemd; Caddy delante con
+certificado de Let's Encrypt.
+
+**Para publicar:** `ssh artlas-deploy /opt/artlas/despliegue/desplegar.sh`
+(la entrada `artlas-deploy` está en el `~/.ssh/config` de la máquina de Manuel,
+con la clave `~/.ssh/artlas-vps`).
+
+**Queda una cosa en Vercel:** quitar `artlas.softie.dev` del proyecto `web`,
+para que no haya dos sitios reclamando el mismo dominio. La cuenta puede
+quedarse pausada, no cuesta nada.
 
 **Por qué, y esto deroga lo que se dijo el 9:** arreglar la caché hunde las
 invocaciones, la CPU y la transferencia de origen, pero **no las Edge
@@ -197,6 +205,48 @@ lo sustituye un servicio de systemd que además arranca solo al reiniciar.
   servidor que está sirviendo, que es el tropiezo ya contado en `next.config.ts`.
 - **El tiempo de servicio pasa a ser nuestro.** Los parches van solos; lo demás,
   no.
+
+### 2d. Los relacionados tumban la ficha del artista
+
+**Visto en producción el 10 de septiembre, y es un fallo PREVIO** —no de la
+caché ni de la mudanza—. En Vercel pasaba igual, y de hecho pasaba más, porque
+estas páginas eran dinámicas y la consulta corría en cada visita.
+
+```
+⨯ Error: relacionados de vincent-van-gogh: canceling statement due to
+  statement timeout
+```
+
+La RPC `related_artists` se pasa de los 3 s del `statement_timeout` del rol
+`anon`, y como `relatedArtists()` en `lib/data.ts` **lanza una excepción**, se
+lleva por delante la ficha entera: 500 en la página del artista.
+
+**Medido, para no volver a medirlo:**
+
+| | ms |
+|---|---|
+| `honore-daumier` (2.388 obras) | **3.176 — en el filo** |
+| `vincent-van-gogh` | 822 |
+| `claude-monet`, `rembrandt`, `goya`, `picasso`… | 130–600 |
+
+O sea: **la consulta no está rota, está justa.** Van Gogh en frío tarda 822 ms
+y funciona; falló porque en ese momento la base estaba cargada rellenando la
+caché de muchas páginas a la vez. El coste no lo manda el número de obras
+—Van Gogh no está entre los que más tienen— sino cuántos artistas comparten su
+país y su movimiento.
+
+**Son dos arreglos, y el segundo importa más:**
+
+1. **Optimizar la RPC.** Territorio de la migración `0046`, donde están los
+   pesos y lo que se midió para elegirlos.
+2. **Que una sección secundaria no pueda tumbar la página.** «Por dónde seguir»
+   es una puerta de salida: que no se pueda pintar no debe impedir ver al
+   pintor. Capturar el error, **registrarlo en voz alta** —nada de cajas
+   negras— y pintar la ficha sin esa sección. Diez minutos.
+
+Ojo al hacer el (2): con ISR, una ficha que se pinte sin relacionados **se
+queda cacheada así 24 horas**. Por eso el registro tiene que gritar, y por eso
+no vale con un `catch` mudo.
 
 ### 3. Lo que pidió Manuel el 3 de septiembre y sigue pendiente
 

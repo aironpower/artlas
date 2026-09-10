@@ -18,6 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 10 de septiembre de 2026 | Fuera de Vercel: Artlas se muda a un servidor propio |
 | 9 de septiembre de 2026 | La caché que nunca se aplicó: por qué Vercel cortó el servicio, y robots y sitemap |
 | 3 de septiembre de 2026 (noche) | Un pintor, un país; y artistas relacionados |
 | 3 de septiembre de 2026 (tarde) | Doce obras al azar; el país del pintor; «36+ obras» y el título del buscador |
@@ -29,6 +30,105 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 10 de septiembre de 2026: fuera de Vercel
+
+**El ciclo de facturación se reinició y la web seguía pausada.** Ahí se aprendió
+lo primero: una pausa de Vercel **no se levanta sola**. «Los proyectos pausados
+se reanudan de uno en uno, nunca automáticamente». Y en las capturas se veía que
+la insignia *Paused* estaba junto al nombre de la CUENTA, no del proyecto: el
+único botón ofrecido era **Upgrade**. La API lo confirma —el endpoint de
+reanudar es `POST /v1/projects/{id}/unpause`, por proyecto; de cuenta no hay—.
+
+También se comprobó que **con el proyecto pausado Vercel ni siquiera
+construye**: se empujaron diez commits y GitHub siguió registrando como último
+despliegue el `3df3733` del 2 de septiembre.
+
+### El dato que cambió la decisión
+
+Se había dicho el día 9 que con la caché arreglada probablemente se volvería a
+caber en Hobby. **Era optimista, y se corrigió:** el arreglo hunde las
+invocaciones, la CPU y la transferencia de origen, pero **no las Edge Requests**
+—una página servida desde la caché sigue contando una—. Con 1,9M contra un tope
+de 1M, Hobby probablemente ya no daba ni arreglado.
+
+Eso convierte los 20 $/mes en estructural, no en opcional. Y de 0 a 20 sin
+escalón intermedio es lo que a Manuel le pareció una barbaridad.
+
+### Lo que se miró y se descartó
+
+**Cloudflare**, que le habían recomendado otras IAs y que es más barato de
+verdad —$5 contra $20—. Se descartó por dos motivos medidos: allí Next corre
+sobre `@opennextjs/cloudflare`, y sin caché incremental en R2 **el ISR se cae a
+SSR en cada petición**, que es el problema recién arreglado; y esa caché tiene
+fallos abiertos hoy. No se pone la pieza recién arreglada encima de la menos
+madura.
+
+**Coolify**, también recomendado por otras IAs y también razonable en general.
+Dos números lo tumbaron para este caso: su propia documentación pide 4 GB para
+que los builds vayan estables —y esa máquina además corre el trabajador de
+ingesta—, lo que obligaba a subir a un CX32 de ~9 €/mes y andar la mitad del
+camino de vuelta; y en Coolify **cada despliegue crea un contenedor nuevo y la
+caché del ISR se pierde** salvo que se monte `.next/cache` como volumen. Para el
+despliegue da igual —ahí se quiere purgar—, pero un reinicio del contenedor
+también la vacía, y el modo de fallo es silencioso.
+
+**Construir en Windows y subir el `.next` ya hecho**, que Manuel propuso para
+ahorrar recursos. Se comprobó y no sale: `required-server-files.json` lleva
+dentro `appDir: C:\projects\artlas\apps\web`, así que ese build no arranca en
+`/opt/artlas`; y el `node_modules` de Windows solo trae
+`@next/swc-win32-x64-msvc`, luego habría que hacer `npm ci` en el servidor de
+todas formas. El ahorro real era ~1 €/mes, y ni eso: la máquina se dimensiona
+por el trabajador de ingesta tanto como por el build. **Se confirmó al montar el
+servidor**: allí el `node_modules` trae `swc-linux-x64-gnu`.
+
+### El montaje
+
+systemd y no Docker, que es lo que encaja con el «deliberadamente simple» que ya
+estaba escrito en `trabajador.cmd`. Cinco ficheros en `despliegue/` y un manual.
+
+**Lo que se aprendió montándolo, y está corregido en el script:**
+
+- **Hetzner renombró el CX22 a CX23.** Mismas características.
+- **El home de `artlas` no puede ser `/opt/artlas`.** Si coinciden, la clave
+  privada de despliegue vive dentro del árbol de trabajo de git —un `git add -A`
+  en el servidor la subiría— y además `git clone` se niega a clonar en un
+  directorio que no esté vacío. Home en `/home/artlas`, aplicación en
+  `/opt/artlas`.
+- **Los finales de línea.** Dos ficheros de `despliegue/` tenían CRLF en la copia
+  de trabajo. `preparar-servidor.sh` se envía **por una tubería desde Windows**,
+  así que ni pasa por el checkout del servidor que lo arreglaría: habría fallado
+  con `$'\r': command not found`, que no menciona los finales de línea por
+  ningún sitio. Añadido `.gitattributes`.
+- **El despliegue construye en `.next-build`** y solo entonces cambia de sitio.
+  Construir sobre `.next` le borra el suelo al servidor que está sirviendo: es el
+  tropiezo que ya estaba contado en `next.config.ts`, y su `NEXT_DIST_DIR` se usa
+  aquí para lo que se inventó. La web queda caída dos segundos, no dos minutos.
+
+### Comprobado en producción
+
+```
+/es /en /fr        200        HTTP -> HTTPS con 308
+certificado        Let's Encrypt, hasta el 9 de diciembre
+fichas de obra     200, x-nextjs-cache: HIT, s-maxage=86400
+museo y /p/2       200, HIT
+?p=2 -> /p/2       308
+robots · sitemap   apuntando a https://artlas.softie.dev, 34.434 URLs
+trabajador         "Escuchando encargos"
+```
+
+Ese último es el que **nunca funcionó en Vercel**: hasta hoy la ingesta exigía
+el ordenador de Manuel encendido.
+
+### Y un fallo que salió al encender
+
+Van Gogh dio un 500: `related_artists` pasándose del `statement_timeout` de 3 s.
+Es previo a todo esto —en Vercel pasaba más, porque esas páginas eran
+dinámicas—. Se midió y se dejó apuntado en NOTAS.md, sección 2d: la consulta no
+está rota, está justa, y el problema de fondo es que una sección secundaria
+pueda tumbar la página entera.
 
 ---
 
