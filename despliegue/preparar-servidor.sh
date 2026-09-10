@@ -60,24 +60,29 @@ fi
 echo "==> Usuario artlas"
 # La web y el trabajador NO corren como root. Si algún día una dependencia
 # tiene un agujero, que lo tenga dentro de /opt/artlas y no en la máquina.
+# El home va en /home/artlas y la aplicación en /opt/artlas, SEPARADOS. Si el
+# home fuera /opt/artlas, la clave privada de despliegue (~/.ssh/id_ed25519)
+# viviría dentro del árbol de trabajo de git: un `git add -A` despistado en el
+# servidor la subiría a GitHub. Y además `git clone` se niega a clonar en un
+# directorio que no esté vacío.
 if ! id artlas >/dev/null 2>&1; then
-  adduser --system --group --home /opt/artlas --shell /bin/bash artlas
+  adduser --system --group --home /home/artlas --shell /bin/bash artlas
 fi
-mkdir -p /opt/artlas /var/log/caddy
-chown artlas:artlas /opt/artlas
+mkdir -p /home/artlas /opt/artlas /var/log/caddy
+chown artlas:artlas /home/artlas /opt/artlas
 chown caddy:caddy /var/log/caddy
 
 # La misma clave con la que entras como root, para el usuario artlas. Sin esto
 # `ssh artlas@LA_IP` pide contraseña —que no tiene— y desplegar sería imposible
 # sin entrar de root cada vez, que es justo lo que se quiere evitar.
 if [ -f /root/.ssh/authorized_keys ]; then
-  install -d -m 700 -o artlas -g artlas /opt/artlas/.ssh
-  install -m 600 -o artlas -g artlas /root/.ssh/authorized_keys /opt/artlas/.ssh/authorized_keys
+  install -d -m 700 -o artlas -g artlas /home/artlas/.ssh
+  install -m 600 -o artlas -g artlas /root/.ssh/authorized_keys /home/artlas/.ssh/authorized_keys
   echo "    clave SSH copiada a artlas"
 else
   echo "    AVISO: root no tiene authorized_keys. Creaste la máquina con"
   echo "    contraseña en vez de con clave SSH. Añade tu clave a"
-  echo "    /opt/artlas/.ssh/authorized_keys antes de seguir."
+  echo "    /home/artlas/.ssh/authorized_keys antes de seguir."
 fi
 
 echo "==> Cortafuegos"

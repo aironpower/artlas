@@ -28,11 +28,12 @@ En [console.hetzner.com](https://console.hetzner.com), **Add Server**:
 |---|---|
 | Región | **Falkenstein** o **Núremberg** (Alemania) |
 | Imagen | **Debian 13** |
-| Tipo | **CX22** — 2 vCPU, 4 GB, 40 GB SSD |
+| Tipo | **CX23** — 2 vCPU, 4 GB, 40 GB SSD |
 | Redes | IPv4 **e** IPv6 |
 | SSH Key | la tuya, pegada aquí |
 
-**CX22 y no el más pequeño:** lo que manda no es servir la web —eso es casi
+**CX23 y no el más pequeño** (se llamaba CX22 hasta 2026; si ves ese nombre,
+es el mismo)**:** lo que manda no es servir la web —eso es casi
 nada— sino `next build`, que es lo más pesado que va a correr esta máquina. Con
 2 GB el build muere por memoria y lo hace con un «Killed» a secas que no explica
 nada.
@@ -82,6 +83,11 @@ Comprueba que funciona y clona:
 ssh -T git@github.com          # dirá "successfully authenticated", sin shell
 git clone git@github.com:aironpower/artlas.git /opt/artlas
 ```
+
+El home del usuario es `/home/artlas` y la aplicación va en `/opt/artlas`, a
+propósito y separados: si coincidieran, la clave privada de arriba viviría
+dentro del árbol de trabajo de git —un `git add -A` en el servidor la subiría—
+y además `git clone` se niega a clonar en un directorio que no esté vacío.
 
 ---
 
