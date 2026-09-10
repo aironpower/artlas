@@ -1,0 +1,56 @@
+# La web de Artlas: `next start` a secas, detrás de Caddy.
+#
+# Nada de Docker ni de adaptadores. En un servidor propio, `next start` es la
+# implementación de referencia de Next: el ISR va a disco, en `.next/cache`, y
+# funciona exactamente como se probó en local. Esa es la razón de elegir un VPS
+# y no Cloudflare — allí el ISR depende de un adaptador cuya caché sobre R2
+# tiene fallos abiertos, y el ISR es justo lo que se acaba de arreglar.
+#
+# Se copia a /etc/systemd/system/artlas-web.service
+
+[Unit]
+Description=Artlas — la web
+# `network-online` y no `network`: sin esto arranca antes de tener IP y el
+# primer render contra Supabase falla con ENOTFOUND.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=artlas
+Group=artlas
+WorkingDirectory=/opt/artlas/apps/web
+
+# El binario directo y NO `npx next`: es un monorepo con node_modules izado a
+# la raíz, y `npx` desde apps/web no lo encuentra. Costó un arranque en falso.
+ExecStart=/opt/artlas/node_modules/.bin/next start -p 3111
+
+Environment=NODE_ENV=production
+# Las credenciales viven en un solo fichero, como en la máquina de Manuel.
+# OJO: incluye la service_role y la DATABASE_URL, así que este proceso las
+# tiene en su entorno. NO llegan al navegador —Next solo mete en el bundle las
+# NEXT_PUBLIC_*— pero es una diferencia real con Vercel, donde deliberadamente
+# no estaban. Separarlas exige tocar `next.config.ts`, que carga el .env de la
+# raíz para el build. Apuntado en DESPLIEGUE-VPS.md.
+EnvironmentFile=/opt/artlas/.env
+
+Restart=always
+RestartSec=5
+
+# Si se muere una y otra vez, que no lo intente en bucle cerrado quemando CPU.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Endurecido básico: no necesita nada fuera de su carpeta.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Salvo `.next`, donde escribe la caché del ISR. El guion delante es para que
+# systemd no se niegue a arrancar si la carpeta aún no existe: sin él, un
+# primer arranque antes del build falla con un error de espacios de nombres de
+# montaje que no menciona `.next` por ningún sitio.
+ReadWritePaths=-/opt/artlas/apps/web/.next
+
+[Install]
+WantedBy=multi-user.target

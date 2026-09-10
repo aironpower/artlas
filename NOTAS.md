@@ -159,6 +159,45 @@ Y una ruta con segmento dinámico no llega a ser ISR sin `generateStaticParams`,
 aunque tenga `revalidate`. **La prueba no es el build, es
 `.next/prerender-manifest.json`:** la ruta tiene que aparecer en `dynamicRoutes`.
 
+### 2c. La mudanza a Hetzner (decidida el 10 de septiembre)
+
+**Artlas se va de Vercel.** El montaje está escrito y sin estrenar: el manual
+paso a paso es [DESPLIEGUE-VPS.md](DESPLIEGUE-VPS.md) y los ficheros están en
+`despliegue/`. Falta lo que solo puede hacer Manuel: crear la máquina, la clave
+de despliegue, el `.env` y mover el DNS.
+
+**Por qué, y esto deroga lo que se dijo el 9:** arreglar la caché hunde las
+invocaciones, la CPU y la transferencia de origen, pero **no las Edge
+Requests** —una página servida desde la caché sigue contando una—. Con 1,9M
+contra un tope de 1M, es probable que Hobby ya no diera, arreglado y todo. Y el
+escalón siguiente de Vercel son 20 $/mes de golpe: no hay nada entre medias.
+
+**Cloudflare se miró y se descartó**, aunque sean $5 y no $20: allí Next corre
+sobre `@opennextjs/cloudflare`, y sin caché incremental sobre R2 el ISR se cae a
+SSR en cada petición —o sea, el problema que se acaba de arreglar—. Esa caché
+tiene fallos abiertos hoy (escrituras que fallan, 503 recurrentes). No se pone
+la pieza recién arreglada encima de la menos madura.
+
+En un VPS, en cambio, `next start` es nativo y el ISR va a disco: funciona
+exactamente como se verificó en local.
+
+**Lo que se lleva la máquina:** la web Y el trabajador de ingesta, que era la
+otra mitad del plan del 3 de septiembre. `trabajador.cmd` deja de hacer falta:
+lo sustituye un servicio de systemd que además arranca solo al reiniciar.
+
+**Lo que hay que saber y no olvidar:**
+
+- **El `.env` del servidor lleva la `service_role` y la `DATABASE_URL`**, así que
+  el proceso de la web las tiene en su entorno. En Vercel estaban deliberadamente
+  fuera. No llegan al navegador —Next solo empaqueta las `NEXT_PUBLIC_*`— pero
+  es una diferencia real. Separarlas exige tocar `next.config.ts`, que carga el
+  `.env` de la raíz para el build.
+- **Desplegar es `despliegue/desplegar.sh`**, y construye en `.next-build` antes
+  de cambiar de sitio. No es manía: construir sobre `.next` le borra el suelo al
+  servidor que está sirviendo, que es el tropiezo ya contado en `next.config.ts`.
+- **El tiempo de servicio pasa a ser nuestro.** Los parches van solos; lo demás,
+  no.
+
 ### 3. Lo que pidió Manuel el 3 de septiembre y sigue pendiente
 
 De su lista de nueve, siete están hechas y contadas en el historial. Quedan

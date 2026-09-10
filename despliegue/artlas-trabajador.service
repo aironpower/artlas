@@ -1,0 +1,39 @@
+# El trabajador de ingesta: escucha encargos hechos desde /es/admin/ingesta.
+#
+# Sustituye a `trabajador.cmd`, que había que arrancar a mano con doble clic y
+# solo funcionaba con el ordenador de Manuel encendido. El bucle de reintento
+# a los 10 segundos que hacía el .cmd lo hace ahora systemd, que además lo
+# levanta al reiniciar la máquina — que era la mitad del problema.
+#
+# Se copia a /etc/systemd/system/artlas-trabajador.service
+
+[Unit]
+Description=Artlas — el trabajador de ingesta
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=artlas
+Group=artlas
+WorkingDirectory=/opt/artlas/packages/ingest
+
+# `npm run worker` es `tsx --env-file=../../.env src/worker.ts`, y ese
+# `--env-file` relativo es la razón de que WorkingDirectory sea esta carpeta y
+# no la raíz. El EnvironmentFile de abajo es cinturón y tirantes: da igual cuál
+# de los dos gane, es el mismo fichero.
+ExecStart=/usr/bin/npm run worker
+
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/artlas/.env
+
+# Los 10 segundos del .cmd, tal cual. «Que no se caiga es cosa suya; que
+# vuelva, de aquí.»
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

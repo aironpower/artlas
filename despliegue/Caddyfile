@@ -1,0 +1,37 @@
+# Caddy delante de la web: TLS automático y poco más.
+#
+# Se elige Caddy y no nginx por una sola razón: el certificado. Pide el de
+# Let's Encrypt solo, lo renueva solo, y no hay que acordarse de nada. Con
+# nginx harían falta certbot, su temporizador y recordar que existe.
+#
+# Se copia a /etc/caddy/Caddyfile
+
+artlas.softie.dev {
+	# Todo a `next start`, que escucha en el 3111 y solo en localhost.
+	reverse_proxy localhost:3111
+
+	# Comprime lo que se sirve. La web manda HTML de catálogo, que comprime
+	# muy bien, y aquí el ancho de banda de Hetzner es generoso pero no
+	# infinito: 20 TB al mes en un CX22.
+	encode zstd gzip
+
+	# El registro, en su fichero y no en el journal, para poder contar
+	# peticiones de rastreadores el día que haga falta saber quién pasa por
+	# aquí. Es la pregunta que en Vercel había que responder a ciegas.
+	log {
+		output file /var/log/caddy/artlas.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+
+	# Cabeceras de seguridad mínimas. No hay CSP a propósito: la web carga
+	# imágenes de Wikimedia y de las APIs de los museos, y una CSP escrita a
+	# ciegas aquí rompería las fichas sin decir por qué.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
