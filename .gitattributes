@@ -1,0 +1,14 @@
+# Finales de línea, y no es cosmética.
+#
+# Los ficheros de `despliegue/` los consume un Linux. Un script con finales de
+# línea de Windows falla con `$'\r': command not found`, que no menciona los
+# finales de línea por ningún sitio, y una unidad de systemd con CRLF arranca
+# un ExecStart con un retorno de carro pegado a la ruta del binario.
+#
+# Y el de `preparar-servidor.sh` es peor todavía, porque se envía por una
+# tubería desde la copia de trabajo de Windows —`ssh root@IP 'bash -s' <
+# despliegue/preparar-servidor.sh`—, así que ni siquiera pasa por el checkout
+# del servidor que lo arreglaría.
+*.sh          text eol=lf
+*.service     text eol=lf
+Caddyfile     text eol=lf
