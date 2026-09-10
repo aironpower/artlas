@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
-import { localizedRoutes } from './lib/routes';
+import { localizedRoutes, paginatedRoutes } from './lib/routes';
 
 /*
  * Las credenciales viven en el .env de la RAÍZ del monorepo, compartido con la
@@ -58,6 +58,35 @@ const config: NextConfig = {
     return localizedRoutes().map(({ lang, segment, canonical }) => ({
       source: `/${lang}/${segment}/:rest*`,
       destination: `/${lang}/${canonical}/:rest*`,
+    }));
+  },
+
+  /*
+   * Las listas de artista y museo llevaban la página en la consulta (`?p=2`) y
+   * ahora la llevan en el camino (`/p/2`). El motivo está en sus páginas: leer
+   * `searchParams` las volvía dinámicas y anulaba su `revalidate = 3600`.
+   *
+   * Esto redirige lo viejo, y no es un detalle: esas URLs están indexadas y
+   * compartidas. Un 308 —permanente— le dice al buscador que mueva lo que
+   * tenía en vez de tratarla como una página nueva.
+   *
+   * UNA regla por idioma y sección, y solo para `?p=2` o más. Lo que quede
+   * fuera —`?p=1`, `?p=0`, `?p=abc`— no se redirige: la página ya no mira la
+   * consulta, así que sirve la primera página, que es exactamente lo que esas
+   * URLs pedían. Y no redirigirlas evita el bucle que tendría una regla cuyo
+   * destino es su propio origen: Next arrastra al destino los parámetros que
+   * no ha consumido, así que `->` el mismo camino volvería a entrar por aquí.
+   *
+   * `[0-9]` y no `\d`: esto es una cadena de TypeScript, y `'\d'` se evalúa
+   * como `'d'` —JavaScript se come las barras de escape que no conoce—. La
+   * expresión habría dejado de aceptar dígitos sin dar un solo error.
+   */
+  async redirects() {
+    return paginatedRoutes().map(({ lang, segment }) => ({
+      source: `/${lang}/${segment}/:slug`,
+      has: [{ type: 'query' as const, key: 'p', value: '(?<pagina>[2-9][0-9]*|1[0-9]+)' }],
+      destination: `/${lang}/${segment}/:slug/p/:pagina`,
+      permanent: true,
     }));
   },
 

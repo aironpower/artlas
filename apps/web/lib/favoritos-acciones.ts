@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { supabaseServer, currentUser } from '@/lib/auth';
 
 /**
@@ -12,7 +11,7 @@ import { supabaseServer, currentUser } from '@/lib/auth';
  * ajeno, la base solo deja escribir filas cuyo `user_id` sea `auth.uid()`. Por
  * eso el `user_id` tampoco viaja desde el formulario.
  */
-export async function alternarFavorito(artworkId: number, ruta: string) {
+export async function alternarFavorito(artworkId: number) {
   const usuario = await currentUser();
   if (!usuario) return { ok: false as const, razon: 'sin-sesion' as const };
 
@@ -48,6 +47,15 @@ export async function alternarFavorito(artworkId: number, ruta: string) {
     return { ok: false as const, razon: 'error' as const };
   }
 
-  revalidatePath(ruta);
+  /*
+   * **Nada de `revalidatePath` aquí, y es lo contrario de lo que había.**
+   *
+   * Antes se llamaba para que el corazón de la ficha se repintara, porque el
+   * estado guardado viajaba en el HTML. Ya no: lo pide `BotonFavorito` desde
+   * el navegador. Dejarlo sería tirar la página cacheada de una obra cada vez
+   * que alguien la guarda —una escritura de ISR y un render nuevo, por un
+   * cambio que ni siquiera sale en ese HTML—. La lista de `/favoritos` no lo
+   * necesita: es `force-dynamic` y se pinta entera en cada visita.
+   */
   return { ok: true as const, guardado: !yaEsta };
 }

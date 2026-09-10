@@ -32,7 +32,7 @@ interface Props {
   slug: string;
   /** La primera que hay que pedir: la siguiente a la que se está viendo. */
   desdePagina: number;
-  /** Camino del museo, sin consulta. Solo para rehacer el enlace si algo falla. */
+  /** Camino del museo. Solo para rehacer el enlace si algo falla: `/p/N` detrás. */
   basePath: string;
   /** La `Paginacion` de siempre, pintada en el servidor. */
   children: ReactNode;
@@ -124,7 +124,7 @@ export default function MasAlLlegarAbajo({
         <nav className="pagination" style={{ gridColumn: '1 / -1' }}>
           <span />
           <span />
-          <Link className="pagination-link" href={`${basePath}?p=${pagina}`} rel="next">
+          <Link className="pagination-link" href={`${basePath}/p/${pagina}`} rel="next">
             {t(lang, 'next')} →
           </Link>
         </nav>

@@ -7,11 +7,42 @@ import { path } from '@/lib/routes';
 import ArtworkGrid from '@/components/ArtworkGrid';
 import ArtworkImage from '@/components/ArtworkImage';
 import { BotonFavorito } from '@/components/BotonFavorito';
-import { currentUser, viewerIsAdmin } from '@/lib/auth';
-import { esFavorita } from '@/lib/favoritos';
-import { alternarFavorito } from '@/lib/favoritos-acciones';
+import { SoloAdmin } from '@/components/SoloAdmin';
 
-export const revalidate = 3600;
+/*
+ * Un día, no una hora.
+ *
+ * Con `revalidate = 3600` cada página que un rastreador vuelve a pisar pasada
+ * la hora se regenera, y son 405.000 páginas: eso es render por página y hora,
+ * pagado, para un catálogo que **solo cambia cuando se lanza una ingesta**. A
+ * 24 horas las regeneraciones se dividen entre 24 y no se pierde nada, porque
+ * entre ingesta e ingesta pasan días.
+ *
+ * **Cómo se purga cuando sí cambia:** desplegando. Cada despliegue estrena
+ * caché, así que el `git push` que sigue a una ingesta ya deja el catálogo al
+ * día. Si algún día la ingesta corre sin desplegar detrás —cuando se mude al
+ * VPS—, hará falta que avise ella, con `revalidatePath` desde una ruta propia.
+ *
+ * La portada NO sube: enseña doce obras al azar y a un día se quedaría quieta.
+ */
+export const revalidate = 86_400;
+
+/**
+ * Vacío a propósito, y hace falta que exista.
+ *
+ * Sin `generateStaticParams` una ruta con segmento dinámico no es ISR: Next la
+ * marca «server-rendered on demand» y la renderiza ENTERA en cada visita,
+ * aunque tenga `revalidate`. Devolviendo la lista vacía no se prerenderiza nada
+ * al construir —serían 405.000 páginas y un build de horas— pero la ruta pasa a
+ * cachearse bajo demanda: la primera visita la genera y la guarda, y las
+ * siguientes la reciben del CDN hasta que caduque la hora.
+ *
+ * Se comprueba en `.next/prerender-manifest.json`: la ruta tiene que aparecer
+ * en `dynamicRoutes`. Si no está, no se está cacheando.
+ */
+export function generateStaticParams() {
+  return [];
+}
 
 /** Cuántas obras se enseñan en cada sección de "sigue por aquí". */
 const RELACIONADAS = 12;
@@ -43,21 +74,23 @@ export default async function ArtworkPage({ params }: Props) {
   if (!work) notFound();
 
   /*
-   * Lo que depende de quién mira: si la obra está entre sus favoritos y si
-   * puede corregirla. Va en `Promise.all` con la ficha ya resuelta porque son
-   * tres consultas independientes y encadenarlas triplicaría la espera.
+   * **Aquí NO se pregunta quién mira, y ese es el punto.**
    *
-   * Que esto exista NO vuelve dinámica la página: son lecturas dentro del
-   * componente, y lo que Next cachea es el resultado con `revalidate`. Por eso
-   * `alternarFavorito` llama a `revalidatePath`: sin él, el corazón se quedaría
-   * como estaba hasta que caducara la hora.
+   * Hasta el 9 de septiembre de 2026 esta página leía `currentUser()`,
+   * `esFavorita()` y `viewerIsAdmin()` antes de pintar, con un comentario que
+   * aseguraba que eso «no vuelve dinámica la página». Sí lo hacía: las tres
+   * pasan por `cookies()`, y en el App Router sin PPR una sola lectura de
+   * cookie en cualquier punto del árbol descarta el render estático de la ruta
+   * entera. El `revalidate = 3600` de arriba no llegaba a aplicarse, y el
+   * `prerender-manifest` del build lo enseñaba: `/[lang]/obra/[id]` no
+   * aparecía ni como estática ni como ISR. 1,7 millones de renders al mes para
+   * 691 escrituras de caché.
+   *
+   * Lo que depende de quién mira vive ahora en el navegador: `BotonFavorito` y
+   * `SoloAdmin` preguntan por su cuenta, y solo si hay sesión. El HTML de esta
+   * ficha es idéntico para todo el mundo, que es lo que permite guardarlo.
    */
   const ruta = path(lang, 'artwork', work.id);
-  const [haySesion, guardada, admin] = await Promise.all([
-    currentUser().then(Boolean),
-    esFavorita(work.id),
-    viewerIsAdmin(),
-  ]);
 
   /*
    * Por dónde seguir. Antes solo había "más obras del mismo autor", y eso
@@ -112,21 +145,12 @@ export default async function ArtworkPage({ params }: Props) {
             * arregla desde ahí, que es donde uno lo nota.
             */}
           <div className="acciones-ficha">
-            <BotonFavorito
-              lang={lang}
-              guardada={guardada}
-              haySesion={haySesion}
-              ruta={ruta}
-              accion={async () => {
-                'use server';
-                await alternarFavorito(work.id, ruta);
-              }}
-            />
-            {admin && (
+            <BotonFavorito lang={lang} obraId={work.id} ruta={ruta} />
+            <SoloAdmin>
               <Link className="btn" href={`${path(lang, 'admin')}/corregir/obra/${work.id}`}>
                 {t(lang, 'editThis')}
               </Link>
-            )}
+            </SoloAdmin>
           </div>
 
           {work.artist && (

@@ -7,6 +7,7 @@ import { path } from '@/lib/routes';
 import SearchBox from '@/components/SearchBox';
 import { LanguagePicker, LanguagePickerSinFiltros } from '@/components/LanguagePicker';
 import { Cuenta } from '@/components/Cuenta';
+import { SesionProvider } from '@/components/Sesion';
 import '../globals.css';
 
 /*
@@ -41,60 +42,64 @@ export default async function LangLayout(
   return (
     <html lang={lang} className={montserrat.variable}>
       <body>
-        <header className="topbar">
-          <Link href={`/${lang}`} className="brand">art<span>las</span></Link>
-          <SearchBox lang={lang} />
-          <div className="grow" />
-          <Suspense fallback={<LanguagePickerSinFiltros current={lang} />}>
-            <LanguagePicker current={lang} />
-          </Suspense>
-        </header>
-
-        {/*
-          * Museos y artistas viven aquí, en una fila propia, y no en la barra
-          * de arriba: allí ya se reparten el sitio el logo, el buscador y tres
-          * idiomas, y en un teléfono de 390 px al buscador le quedaban 40 px.
-          * Meterle dos enlaces más lo dejaría otra vez sin espacio.
-          *
-          * Van en todas las páginas porque el problema era justamente que a
-          * museos y artistas solo se llegaba de rebote.
-          */}
-        <nav className="shell secciones" aria-label={t(lang, 'explore')}>
-          {/*
-            * Las etiquetas cortas —«Museos», no «Todos los museos»—. Con cuatro
-            * secciones, las largas se salían de un teléfono de 390 px y
-            * «Buscar» quedaba cortado contra el borde. En una barra de
-            * navegación el sustantivo basta: el «todos» ya lo dice el estar
-            * ahí. Las largas siguen sirviendo de título dentro de cada página.
-            */}
-          <Link href={path(lang, 'museums')}>{t(lang, 'museums')}</Link>
-          <Link href={path(lang, 'artists')}>{t(lang, 'artists')}</Link>
-          <Link href={path(lang, 'movements')}>{t(lang, 'movements')}</Link>
-          {/*
-            * «Buscador» y no «Buscar»: en una fila de sustantivos —Museos,
-            * Artistas, Movimientos— un verbo se lee como un botón, y esto es
-            * un sitio al que se va. La caja de arriba sigue siendo «Buscar»,
-            * que ahí sí es la acción.
-            */}
-          <Link href={path(lang, 'search')}>{t(lang, 'searchSection')}</Link>
-
-          <span className="grow" />
+        <SesionProvider>
+          <header className="topbar">
+            <Link href={`/${lang}`} className="brand">art<span>las</span></Link>
+            <SearchBox lang={lang} />
+            <div className="grow" />
+            <Suspense fallback={<LanguagePickerSinFiltros current={lang} />}>
+              <LanguagePicker current={lang} />
+            </Suspense>
+          </header>
 
           {/*
-            * Lo de la cuenta depende de la cookie de sesión, así que es
-            * dinámico. Va dentro de un `Suspense` para que el resto de la
-            * página se siga sirviendo desde la caché mientras se resuelve
-            * quién mira: sin él, una sola cookie volvería dinámico el sitio
-            * entero.
+            * Museos y artistas viven aquí, en una fila propia, y no en la barra
+            * de arriba: allí ya se reparten el sitio el logo, el buscador y tres
+            * idiomas, y en un teléfono de 390 px al buscador le quedaban 40 px.
+            * Meterle dos enlaces más lo dejaría otra vez sin espacio.
+            *
+            * Van en todas las páginas porque el problema era justamente que a
+            * museos y artistas solo se llegaba de rebote.
             */}
-          <Suspense fallback={null}>
+          <nav className="shell secciones" aria-label={t(lang, 'explore')}>
+            {/*
+              * Las etiquetas cortas —«Museos», no «Todos los museos»—. Con cuatro
+              * secciones, las largas se salían de un teléfono de 390 px y
+              * «Buscar» quedaba cortado contra el borde. En una barra de
+              * navegación el sustantivo basta: el «todos» ya lo dice el estar
+              * ahí. Las largas siguen sirviendo de título dentro de cada página.
+              */}
+            <Link href={path(lang, 'museums')}>{t(lang, 'museums')}</Link>
+            <Link href={path(lang, 'artists')}>{t(lang, 'artists')}</Link>
+            <Link href={path(lang, 'movements')}>{t(lang, 'movements')}</Link>
+            {/*
+              * «Buscador» y no «Buscar»: en una fila de sustantivos —Museos,
+              * Artistas, Movimientos— un verbo se lee como un botón, y esto es
+              * un sitio al que se va. La caja de arriba sigue siendo «Buscar»,
+              * que ahí sí es la acción.
+              */}
+            <Link href={path(lang, 'search')}>{t(lang, 'searchSection')}</Link>
+
+            <span className="grow" />
+
+            {/*
+              * Lo de la cuenta lo pregunta el navegador, no el servidor, y ese
+              * cambio es el que devuelve la caché al sitio entero.
+              *
+              * Aquí estuvo el agujero: `Cuenta` leía la cookie de sesión al
+              * pintarse y vive en el `layout`, así que volvía dinámica TODA
+              * página de Artlas. El `<Suspense>` que lo envolvía prometía acotar
+              * lo dinámico a este componente y no lo hacía: sin PPR, `Suspense`
+              * hace streaming de un render dinámico, no salva la caché de la
+              * ruta. Ver `components/Cuenta.tsx`.
+              */}
             <Cuenta lang={lang} />
-          </Suspense>
-        </nav>
+          </nav>
 
-        <main className="shell">{children}</main>
+          <main className="shell">{children}</main>
 
-        <footer className="shell small muted">{t(lang, 'sourceNote')}</footer>
+          <footer className="shell small muted">{t(lang, 'sourceNote')}</footer>
+        </SesionProvider>
       </body>
     </html>
   );

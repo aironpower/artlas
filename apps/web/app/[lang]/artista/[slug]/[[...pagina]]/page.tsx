@@ -7,9 +7,42 @@ import { getArtist, artworksByArtist, relatedArtists, type RelatedArtist } from 
 import { path } from '@/lib/routes';
 import ArtistMap from '@/components/ArtistMap';
 import ArtworkGrid from '@/components/ArtworkGrid';
-import Paginacion, { leerPagina } from '@/components/Paginacion';
+import Paginacion, { paginaDeRuta } from '@/components/Paginacion';
 
-export const revalidate = 3600;
+/*
+ * Un día, no una hora.
+ *
+ * Con `revalidate = 3600` cada página que un rastreador vuelve a pisar pasada
+ * la hora se regenera, y son 34.000 páginas: eso es render por página y hora,
+ * pagado, para un catálogo que **solo cambia cuando se lanza una ingesta**. A
+ * 24 horas las regeneraciones se dividen entre 24 y no se pierde nada, porque
+ * entre ingesta e ingesta pasan días.
+ *
+ * **Cómo se purga cuando sí cambia:** desplegando. Cada despliegue estrena
+ * caché, así que el `git push` que sigue a una ingesta ya deja el catálogo al
+ * día. Si algún día la ingesta corre sin desplegar detrás —cuando se mude al
+ * VPS—, hará falta que avise ella, con `revalidatePath` desde una ruta propia.
+ *
+ * La portada NO sube: enseña doce obras al azar y a un día se quedaría quieta.
+ */
+export const revalidate = 86_400;
+
+/**
+ * Vacío a propósito, y hace falta que exista.
+ *
+ * Sin `generateStaticParams` una ruta con segmento dinámico no es ISR: Next la
+ * marca «server-rendered on demand» y la renderiza ENTERA en cada visita,
+ * aunque tenga `revalidate`. Devolviendo la lista vacía no se prerenderiza nada
+ * al construir —serían 34.000 páginas y un build de horas— pero la ruta pasa a
+ * cachearse bajo demanda: la primera visita la genera y la guarda, y las
+ * siguientes la reciben del CDN hasta que caduque la hora.
+ *
+ * Se comprueba en `.next/prerender-manifest.json`: la ruta tiene que aparecer
+ * en `dynamicRoutes`. Si no está, no se está cacheando.
+ */
+export function generateStaticParams() {
+  return [];
+}
 
 const POR_PAGINA = 36;
 
@@ -21,9 +54,16 @@ const POR_PAGINA = 36;
  */
 const TOPE_MAPA = 500;
 
+/*
+ * La página va en la RUTA —`/es/artista/goya/p/2`— y no en `?p=2`, y no es
+ * cosmética. Leer `searchParams` vuelve dinámica la página en el App Router, y
+ * eso descartaba el `revalidate = 3600` de arriba: las 11.426 fichas de artista
+ * se renderizaban enteras, con su mapa y sus relacionados, en cada visita. Por
+ * `params` llega gratis. Las URLs viejas con `?p=` las redirige
+ * `next.config.ts`, así que ningún enlace compartido se rompe.
+ */
 interface Props {
-  params: Promise<{ lang: string; slug: string }>;
-  searchParams: Promise<Record<string, string | undefined>>;
+  params: Promise<{ lang: string; slug: string; pagina?: string[] }>;
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -39,11 +79,12 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export default async function ArtistPage({ params, searchParams }: Props) {
-  const { lang, slug } = await params;
+export default async function ArtistPage({ params }: Props) {
+  const { lang, slug, pagina: segmentos } = await params;
   if (!isLang(lang)) notFound();
 
-  const pagina = leerPagina((await searchParams).p);
+  const pagina = paginaDeRuta(segmentos);
+  if (pagina === null) notFound();
 
   const artist = await getArtist(lang, slug);
   if (!artist) notFound();
@@ -128,6 +169,7 @@ export default async function ArtistPage({ params, searchParams }: Props) {
           page={pagina}
           hasNext={lote.length > POR_PAGINA}
           basePath={path(lang, 'artist', slug)}
+          modo="ruta"
           total={artist.artwork_count}
           pageSize={POR_PAGINA}
         />

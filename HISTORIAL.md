@@ -18,6 +18,7 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 
 | Fecha | Qué pasó |
 |---|---|
+| 9 de septiembre de 2026 | La caché que nunca se aplicó: por qué Vercel cortó el servicio, y robots y sitemap |
 | 3 de septiembre de 2026 (noche) | Un pintor, un país; y artistas relacionados |
 | 3 de septiembre de 2026 (tarde) | Doce obras al azar; el país del pintor; «36+ obras» y el título del buscador |
 | 3 de septiembre de 2026 | Buscar dentro del radio; lista y orden; «Buscador»; el header en el móvil; las minúsculas |
@@ -28,6 +29,129 @@ había pasado una vez que tres tareas hechas siguieran escritas como pendientes.
 | 31 de agosto de 2026 | Las ciudades, corregidas |
 | 29 de agosto de 2026 | La Galería Nacional entera; autores recuperados; la aplicación de ingesta; corregir el catálogo a mano; el color y el mapa |
 | 28 de agosto de 2026 | El giro de curar a amasar; paginación y móvil |
+
+---
+
+## 9 de septiembre de 2026: la caché que nunca se aplicó
+
+**Vercel cortó el servicio.** El plan gratuito, pasado en cuatro medidas a la
+vez: 1,9M de peticiones al CDN (tope 1M), 1,7M de invocaciones de función (tope
+1M), 12h de CPU activa (tope 4h) y 16,42 GB de transferencia de origen (tope
+10). En una web que aún no se le había enseñado a nadie.
+
+La pregunta con la que empezó la sesión era «¿me sale caro pasar a Pro?». La
+respuesta, con las tarifas leídas: **no** —con ese consumo serían unos 5-6 $ de
+uso contra los 20 $ de crédito que Pro ya incluye, así que 20 $ planos—. Pero
+antes de pagarlos había un número que no cuadraba, y ahí estaba todo.
+
+### El número que no cuadraba
+
+**1,7 millones de invocaciones y 691 escrituras de ISR.** Si las páginas se
+cachearan, la proporción sería la inversa. El `prerender-manifest.json` del
+build lo confirmó sin lugar a dudas: `/[lang]/obra/[id]`, `/[lang]/artista/[slug]`
+y `/[lang]/museo/[slug]` **no aparecían**, ni como estáticas ni como ISR. Las
+232.000 páginas del catálogo —el 99% del sitio— se renderizaban enteras, contra
+Supabase, en cada visita. El `export const revalidate = 3600` que llevan todas
+no llegaba a aplicarse nunca.
+
+Tres causas, y las tres estaban escritas en el código como lo contrario:
+
+**1. La cookie de sesión en el `layout`.** `Cuenta` era un componente de
+servidor que leía la sesión al pintarse. Vive en `app/[lang]/layout.tsx`, así
+que esa lectura volvía dinámica TODA página de Artlas. El comentario que había
+prometía que el `<Suspense>` de alrededor acotaba lo dinámico a ese componente
+—«sin él, una sola cookie volvería dinámico el sitio entero»—. **No es así:**
+sin PPR, `Suspense` sirve para hacer streaming de un render dinámico, no para
+salvar la caché de la ruta. Curiosamente, el razonamiento correcto SÍ estaba
+escrito, dos ficheros más allá: `LanguagePicker` es de cliente justamente para
+no llamar a `headers()`, y su comentario explica que eso «volvería dinámicas
+todas las páginas». La regla estaba entendida; solo no se aplicó aquí.
+
+**2. Lo mismo en la ficha de obra.** `currentUser()`, `esFavorita()` y
+`viewerIsAdmin()` antes de pintar, con un comentario que aseguraba que «esto NO
+vuelve dinámica la página: son lecturas dentro del componente». Las tres pasan
+por `cookies()`.
+
+**3. `searchParams` en artista y museo.** La paginación `?p=2`. Leer
+`searchParams` en una página del App Router la vuelve dinámica igual que una
+cookie.
+
+Y sobre eso, **ni `robots.txt` ni `sitemap.xml`**: no existía ninguno de los
+dos. Un catálogo de 232.000 URLs sin una sola indicación, con el buscador
+indexable y su espacio infinito de `?q=` detrás. 1,7M de peticiones al mes son
+57.000 al día: eso es rastreo, no visitas.
+
+### Lo que se hizo
+
+**Lo que depende de quién mira se pregunta desde el navegador.** `/api/sesion`
+dice si hay sesión y si administra; `/api/favorito` dice si una obra está
+guardada, y solo se llama cuando ya se sabe que hay alguien dentro —un visitante
+anónimo, que es casi todo el mundo y todo rastreador, no genera ni una
+petición—. Un `SesionProvider` en el layout lo pregunta UNA vez por carga, para
+que la barra de cuenta y el botón de favorito no hagan dos viajes.
+
+Esto no era solo caro: **si alguna de esas páginas hubiera llegado a cachearse,
+habría servido el «Salir» de quien pasó primero a todos los demás.** El HTML
+compartido no puede llevar el estado de una persona.
+
+**El precio, dicho claro:** sin JavaScript la barra enseña siempre «Entrar» y el
+botón de favorito no funciona. No tiene arreglo dentro de una página cacheada
+—el HTML es el mismo para todos por definición— y el precio es pequeño porque
+nada del catálogo exige cuenta. `/favoritos` sigue siendo página de servidor.
+
+**La paginación se mudó al camino.** `/es/artista/goya/p/2` en vez de `?p=2`,
+con las páginas en un segmento `[[...pagina]]`. Las URLs viejas redirigen con un
+308 generado desde `SEGMENTS`, en los tres idiomas. `/p/1` no existe a propósito:
+dos URLs con la misma lista son dos páginas que indexar y dos entradas de caché.
+
+**Y el que faltaba, que no estaba en ningún sitio:** una ruta con segmento
+dinámico **no es ISR sin `generateStaticParams`**, aunque tenga `revalidate`.
+Next la marca «server-rendered on demand» y la renderiza entera cada vez.
+Devolviendo la lista vacía no se prerenderiza nada al construir —serían 405.000
+páginas— pero la ruta pasa a cachearse bajo demanda. Sin esto, todo lo anterior
+no habría servido de nada: se quitaron las tres lecturas de cookie y el
+manifiesto seguía sin listar las rutas.
+
+**`robots.ts` y `sitemap.ts`**, que no existían. El robots cierra el panel,
+entrar, favoritos, el buscador y —esto importa— **todo lo que lleve `?`**: desde
+que la paginación vive en la ruta, ninguna página de contenido necesita consulta,
+así que lo que queda son ordenaciones y filtros, que son justo las páginas que
+siguen renderizándose en cada visita. El sitemap lleva el esqueleto: 34.434 URLs
+—portada, índices, 48 museos y 11.426 artistas por tres idiomas—.
+
+### Comprobado, no supuesto
+
+Con `next start` y las cabeceras en la mano, no con el build a ojo:
+
+```
+/es/obra/1973                  1a=MISS  2a=HIT  s-maxage=3600
+/es/museo/alte-pinakothek/p/2  1a=MISS  2a=HIT  s-maxage=3600
+/fr/artiste/a-a-lamb           1a=MISS  2a=HIT  s-maxage=3600
+/es/museo/alte-pinakothek?p=2  308 -> /es/museo/alte-pinakothek/p/2
+/en/museum/alte-pinakothek?p=3 308 -> /en/museum/alte-pinakothek/p/3
+```
+
+Y el HTML de una ficha de obra sirve `<a href="/es/entrar">Entrar</a>` y el botón
+de favorito en su forma anónima: ni un rastro del estado de nadie.
+
+### Dos que costaron encontrarlas
+
+**El sitemap salía VACÍO** —un XML bien formado, sin una sola URL y sin un solo
+error—. `generateSitemaps` devuelve los identificadores como números, pero a la
+función llegan desde el segmento de la URL (`/sitemap/0.xml`), así que son
+cadenas: `id === 0` era falso y el trozo 0 caía en la rama de las obras, que
+está apagada. No lo habría contado nadie más que un buscador, y en silencio.
+
+**Un `\d` que no era un `\d`.** La expresión de la redirección se escribió
+`'(?<pagina>[2-9]\d*|1\d+)'` en una cadena de TypeScript, donde `'\d'` se
+evalúa como `'d'`: JavaScript se come las barras de escape que no conoce. Habría
+dejado de aceptar dígitos sin dar un solo error. Ahora es `[0-9]`.
+
+Y una que se decidió no pelear: **`/p/1` y `/p/abc` devuelven 200 y no 404.**
+`notFound()` se llama —el 404 está en la respuesta y Next añade
+`<meta name="robots" content="noindex">`— pero con `loading.tsx` la página va en
+streaming y el estado ya se envió antes de saberlo. Es comportamiento de Next, no
+nuestro, y sale barato: el `notFound()` ocurre antes de tocar la base.
 
 ---
 

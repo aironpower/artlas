@@ -29,16 +29,20 @@ directa de estados). Las de obras, imágenes y artistas no se tocaron ese día
 | Museos | **48 de 48**, en 34 ciudades |
 | Movimientos | 224 en la tabla · 186 con obra publicada |
 | Hallazgos abiertos | 43 (de 344; los otros 301 ya revisados) |
-| Migraciones | `0001`–`0046` · **46 aplicadas, 0 pendientes** |
+| Migraciones | `0001`–`0047` · **46 aplicadas, 1 pendiente** (la `0047`) |
 | Espacio | **406,6 MB** de los 500 del plan gratuito (81,3%) |
+| De eso, índices | **206,6 MB: más que las tablas** (200,0 MB). 46,6 MB sin usar |
 
 **Lo primero, siempre: comprobar que no hay nada corriendo.** Tocar el catálogo
 con una ingesta viva ya tumbó un museo entero. En PowerShell,
 `Get-CimInstance Win32_Process -Filter "Name = 'node.exe'"` y mirar si alguna
 línea de comandos lleva `cli.ts`.
 
-**Ojo al espacio antes de meter un museo grande.** A ~0,89 KB por obra quedan
-unas 105.000 de margen. Y **desconfiar de lo que crece sin ser el catálogo**: el
+**Ojo al espacio antes de meter un museo grande.** El margen es la MITAD de lo
+que se venía diciendo: `artworks` y sus índices son 297 MB para 269.159 filas
+—1,10 KB por obra, y ~1,7 KB si está publicada y lleva traducciones—, así que
+los 93,4 MB libres dan para **unas 60.000 obras, no 105.000**. Los 0,89 KB con
+los que se calculaba antes se quedaban cortos (medido el 3 de septiembre). Y **desconfiar de lo que crece sin ser el catálogo**: el
 susto de agosto —495 MB, el 99% del plan— no fueron las obras, fue una tabla
 derivada que guardaba una fila por obra para repetir lo que la obra ya decía.
 `check-db` lo desglosa tabla a tabla.
@@ -71,7 +75,7 @@ en el historial.
   administrador a otra persona, con todo lo que eso abre.
 
 Y el aviso que no se puede olvidar antes de invitar a nadie: **quedan ~93 MB**,
-unas 105.000 obras. Un museo grande se los come.
+unas 60.000 obras. Un museo grande se los come.
 
 ### 2. Cabos conocidos, de un rato cada uno
 
@@ -80,17 +84,25 @@ unas 105.000 obras. Un museo grande se los come.
   SPARQL no garantiza el orden, así que la ingesta se queda con uno u otro en
   cada pasada. Se arregla **ordenando los valores antes de elegir**, como ya se
   hizo con las fechas de los movimientos. Coste conocido y acotado, no una fuga.
-- **`artworks_title_trgm`: 25 MB y `idx_scan = 0`.** Es parcial —solo
-  publicadas— y por eso no lo usa nadie; corregir por título no llega a las
-  obras que esperan datos. Cambiarlo por uno completo son ~40 MB.
+- **Los índices que no lee nadie: la `0047` está escrita y sin aplicar.**
+  Medido el 3 de septiembre contra `pg_stat_user_indexes`, con estadísticas
+  desde el 20 de agosto: cuatro índices con `idx_scan = 0` suman **46,6 MB**
+  —`artworks_title_trgm` (25 MB), `artworks_inventory_idx` (9,45),
+  `artworks_slug_idx` (8,87) y `artist_translations_name_trgm` (3,27)—. Ninguno
+  es primario ni único. Aplicarla baja al **72,0%** del plan.
 
-  **Comprobado otra vez el 3 de septiembre y sigue en cero**, aunque el
-  comentario de la migración `0044` llegó a decir lo contrario: buscar dentro
-  del radio tira de `artists_name_trgm` (1.932 lecturas) y de
-  `artwork_translations_title_trgm` (3), no de este. Sigue siendo peso muerto.
-  La decisión —tirarlo y recuperar 25 MB, o cambiarlo por uno completo y gastar
-  15 más para poder corregir por título las 134.000 que esperan— sigue sin
-  tomarse.
+  Los dos hallazgos nuevos: `fill-images.ts` cruza los inventarios **en memoria**
+  y no por SQL, y las obras se sirven por `/obra/[id]`, así que su slug se lee
+  pero nunca se busca. Tirar `artworks_title_trgm` no cierra la puerta al índice
+  completo (~40 MB) si algún día se quiere corregir por título las 134.000 que
+  esperan: se crea entonces, con el hueco ya recuperado.
+
+  **Pide ingesta parada**: `drop index` toma un bloqueo exclusivo breve sobre
+  `artworks`, y no puede ser `CONCURRENTLY` porque `migrate.ts` envuelve cada
+  migración en una transacción. Pasa el `--dry-run`.
+
+  Queda vigilado `artwork_translations_title_trgm`: 15 MB para 3 lecturas. No se
+  tira porque esas 3 son el buscador funcionando.
 - **Buscar y la lista de artistas siguen con botón de paginación**, mientras que
   la ficha de museo ya sigue sola al llegar abajo.
 - **Las obras del radio son 60 como mucho**, las más destacadas. Con el buscador
@@ -107,6 +119,45 @@ unas 105.000 obras. Un museo grande se los come.
   se rehace entero. Con la ingesta incremental ya es barato, así que urge menos.
 - **`ingest_runs`, `ingest_steps` y `jobs` no se borran nunca.** Son diminutas
   —unas 48 filas por barrido—; si algún día molestan, la retención es trivial.
+
+### 2b. Lo que quedó abierto de la caché (9 de septiembre)
+
+El agujero grande está cerrado —las fichas de obra, artista y museo se sirven de
+la caché, comprobado con `x-nextjs-cache: HIT`; la crónica y el porqué, en
+[HISTORIAL.md](HISTORIAL.md)—. Lo que sigue vivo:
+
+- **Las tres listas índice siguen dinámicas.** `/museos`, `/artistas` y
+  `/movimientos` leen `searchParams` para su ordenación y sus filtros, así que
+  se renderizan en cada visita. Son 9 URLs frente a 405.000, pero cuelgan de la
+  barra de navegación de TODAS las páginas. De momento las cierra el
+  `Disallow: /*?` del robots. Arreglarlas de verdad es mover el orden a cliente
+  —`/museos` son 48 filas y `/movimientos` 186, se ordenan en el navegador sin
+  tocar el servidor—; `/artistas` es harina de otro costal, con su búsqueda y su
+  filtro por nacionalidad.
+- **`/buscar` seguirá siendo dinámico**, y está bien que lo sea: los filtros SON
+  la página. Por eso el robots lo cierra.
+- **Las obras están fuera del sitemap**, con `OBRAS_EN_SITEMAP` en
+  `lib/sitemap-datos.ts`. Encenderlo ofrece las ~405.000 URLs de golpe, y el
+  primer barrido no cabe en el plan gratuito (200.000 escrituras de ISR).
+  **Decidir el hospedaje antes de tocarlo** — ver la sección 5.
+- **`/p/1` y `/p/abc` devuelven 200 con `noindex`** en vez de 404. Es cómo se
+  comporta Next con `loading.tsx` y streaming, no algo nuestro, y el
+  `notFound()` ocurre antes de tocar la base, así que no cuesta consultas.
+
+**Las fichas caducan a las 24 horas, no a la hora** (subido el 10 de septiembre):
+el catálogo solo cambia cuando lanzas una ingesta, y a una hora cada página que
+un rastreador vuelve a pisar se regeneraba. **La purga es desplegar:** cada
+despliegue estrena caché, así que el `git push` que sigue a una ingesta ya deja
+el catálogo al día. Si algún día la ingesta corre sin despliegue detrás —cuando
+se mude al VPS—, tendrá que avisar ella con `revalidatePath`. La portada sigue a
+una hora: enseña doce obras al azar.
+
+**Y lo que hay que recordar al tocar cualquier página pública:** leer una cookie
+o `searchParams` en el árbol de una página la vuelve dinámica ENTERA, y un
+`<Suspense>` alrededor no la salva —eso es lo que costó la factura de agosto—.
+Y una ruta con segmento dinámico no llega a ser ISR sin `generateStaticParams`,
+aunque tenga `revalidate`. **La prueba no es el build, es
+`.next/prerender-manifest.json`:** la ruta tiene que aparecer en `dynamicRoutes`.
 
 ### 3. Lo que pidió Manuel el 3 de septiembre y sigue pendiente
 
@@ -177,6 +228,55 @@ estas dos, y ninguna se puede empezar a escribir sin decidir algo antes.
   verdad hace falta uno propio (Resend, Postmark); hasta entonces, el segundo
   registro de la hora ve «no hemos podido enviar el correo».
 - **Nominatim y las teselas del mapa son terceros sin contrato.**
+
+### 5. La mudanza: Supabase Pro, y el trabajador a un servidor
+
+**Decidido el 3 de septiembre de 2026.** Dos cosas separadas que se decidieron
+juntas, y que conviene no volver a mezclar:
+
+1. **Pasar a Supabase Pro.** Levanta el techo de los 500 MB —más allá de los
+   8 GB se paga por gigabyte y sale barato— y trae **7 días de copias diarias,
+   que en el plan gratuito no hay ninguna**. Deja sin efecto la restricción que
+   explicaba dos decisiones del proyecto: **los 4 idiomas retirados (it, de, pt,
+   nl) se cayeron porque sus traducciones de catálogo no cabían**, y sus textos
+   de interfaz siguen escritos. Reactivarlos pasa a ser una reingesta.
+
+2. **Mudar el trabajador a un VPS de Hetzner.** Hoy la ingesta vive en un `.cmd`
+   en el ordenador de Manuel: con la máquina apagada no se puede ingerir desde
+   la web, y la migración `0043` existe solo para poder decirlo en pantalla. La
+   máquina del trabajador **no guarda estado**: si se muere, los encargos se
+   quedan en la cola de `jobs` y no se pierde nada. Un CX22 sobra.
+
+**Por qué NO se autohospeda Supabase**, que fue la idea de partida y se auditó
+entera: cabía —solo se usan Postgres con `postgis`/`pg_trgm`/`unaccent`,
+PostgREST y GoTrue; ni Storage, ni Realtime, ni Edge Functions, ni `pg_cron`—,
+pero ahorrar ~16 €/mes obligaba a adoptar dos averías nuevas (el disco que se
+llena, la actualización que rompe un contenedor) y toda una lista de mudanza:
+SMTP propio, reconfigurar OAuth de Google y GitHub, rotar `anon` y
+`service_role`, volcar `auth.users`. **Separar las dos cosas evita esa lista
+entera**: el problema real era el trabajador, no la base.
+
+**Lo que hay que hacer al mudar el trabajador:**
+
+- `trabajador.cmd` → **una unidad de systemd con `Restart=always`**. Hace lo del
+  bucle de diez segundos y además sobrevive a los reinicios, que el `.cmd` no.
+- `worker.ts` debería portar tal cual: lanza `node` directamente, que era una
+  regla motivada por Windows pero que en Linux tampoco estorba.
+- El `.env` con la `SERVICE_ROLE_KEY` va en esa máquina. La `DATABASE_URL` de
+  las migraciones puede seguir solo en el portátil.
+- `workers` se identifica por `host`: el panel enseñará un nombre de máquina
+  nuevo y no hay nada que tocar.
+- **A partir de ese día el panel es infraestructura, no comodidad.** Cuando la
+  ingesta deje de correr en una ventana que se puede mirar, `0026` y `0043` son
+  la única forma de saber qué pasa.
+
+**Vercel se queda donde está.** El plan gratuito no aprieta: las imágenes no
+pasan por él —`<img>` directo a Commons, Met y AIC—, así que el tráfico es solo
+HTML. Las dos cosas a vigilar son la cláusula de uso no comercial del plan
+Hobby, y que Googlebot se ponga a rastrear las 232.491 páginas con
+`revalidate = 3600`: cada página caducada que pida es una función de Vercel y
+una tanda de consultas. La respuesta entonces es subir el `revalidate` de la
+cola larga, no cambiar de sitio.
 
 ---
 

@@ -138,3 +138,25 @@ export function localizedRoutes(): { lang: string; segment: string; canonical: s
 
   return rules;
 }
+
+/**
+ * Las secciones cuya lista se pagina por RUTA (`/es/artista/goya/p/2`), en cada
+ * idioma. Lo consume `next.config.ts` para redirigir las URLs viejas, que
+ * llevaban la página en la consulta (`?p=2`).
+ *
+ * La paginación se movió al camino porque leer `searchParams` vuelve dinámica
+ * la página y descartaba su `revalidate`. Los enlaces con `?p=` que ya estén
+ * compartidos o indexados siguen valiendo: redirigen con un 308, así que
+ * ningún buscador pierde lo que tenía.
+ *
+ * El segmento `p` NO se traduce, igual que `admin`: es maquinaria de la lista,
+ * no una palabra del producto, y traducirlo obligaría a tres reescrituras más
+ * por sección para nada que nadie lea.
+ */
+export function paginatedRoutes(): { lang: string; segment: string }[] {
+  const secciones: Section[] = ['artist', 'museum'];
+
+  return secciones.flatMap((section) =>
+    Object.entries(SEGMENTS[section]).map(([lang, segment]) => ({ lang, segment })),
+  );
+}
