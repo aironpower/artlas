@@ -90,6 +90,18 @@ const config: NextConfig = {
     }));
   },
 
+  /*
+   * `noindex` en todas las respuestas, no solo en el HTML: también en imágenes
+   * optimizadas y rutas de la API. Es la segunda capa de `app/robots.ts`, para
+   * el buscador que llega por un enlace sin haber leído antes el robots.txt.
+   */
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+    }];
+  },
+
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',

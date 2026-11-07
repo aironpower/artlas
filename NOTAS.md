@@ -1,6 +1,6 @@
 # Notas de trabajo
 
-Estado de Artlas al **3 de septiembre de 2026** y lo siguiente a hacer.
+Estado de Artlas al **3 de septiembre de 2026** (la publicación, al 7 de noviembre: sección 2c) y lo siguiente a hacer.
 
 **Aquí solo vive lo que sigue siendo verdad hoy.** La crónica de lo ya hecho
 —con el porqué de cada decisión y lo que se aprendió rompiéndola— está en
@@ -136,10 +136,6 @@ la caché, comprobado con `x-nextjs-cache: HIT`; la crónica y el porqué, en
   filtro por nacionalidad.
 - **`/buscar` seguirá siendo dinámico**, y está bien que lo sea: los filtros SON
   la página. Por eso el robots lo cierra.
-- **Las obras están fuera del sitemap**, con `OBRAS_EN_SITEMAP` en
-  `lib/sitemap-datos.ts`. Encenderlo ofrece las ~405.000 URLs de golpe, y el
-  primer barrido no cabe en el plan gratuito (200.000 escrituras de ISR).
-  **Decidir el hospedaje antes de tocarlo** — ver la sección 5.
 - **`/p/1` y `/p/abc` devuelven 200 con `noindex`** en vez de 404. Es cómo se
   comporta Next con `loading.tsx` y streaming, no algo nuestro, y el
   `notFound()` ocurre antes de tocar la base, así que no cuesta consultas.
@@ -159,52 +155,28 @@ Y una ruta con segmento dinámico no llega a ser ISR sin `generateStaticParams`,
 aunque tenga `revalidate`. **La prueba no es el build, es
 `.next/prerender-manifest.json`:** la ruta tiene que aparecer en `dynamicRoutes`.
 
-### 2c. Artlas ya NO está en Vercel (hecho el 10 de septiembre)
+### 2c. De vuelta en Vercel, y cerrada a los buscadores (7 de noviembre)
 
-**Corre en un VPS de Hetzner, `<IP del servidor>`**, Debian 13, CX23. El manual
-es [DESPLIEGUE-VPS.md](DESPLIEGUE-VPS.md) y los ficheros están en `despliegue/`.
-La web y el trabajador son dos servicios de systemd; Caddy delante con
-certificado de Let's Encrypt.
+**El servidor de Hetzner ya no existe**: Manuel lo borró, y el DNS de
+`artlas.softie.dev` que apuntaba a su IP también. `DESPLIEGUE-VPS.md` y
+`despliegue/` quedan como referencia por si algún día vuelve a un servidor.
+El proyecto de Supabase estuvo pausado por inactividad y se restauró ese día.
 
-**Para publicar:** `ssh artlas-deploy /opt/artlas/despliegue/desplegar.sh`
-(la entrada `artlas-deploy` está en el `~/.ssh/config` de la máquina de Manuel,
-con la clave `~/.ssh/artlas-vps`).
+**Artlas es ahora una demo que se enseña con un enlace, no una web que busque
+salir en Google.** Lo que se hizo para que quepa en el plan Hobby de Vercel:
 
-**Queda una cosa en Vercel:** quitar `artlas.softie.dev` del proyecto `web`,
-para que no haya dos sitios reclamando el mismo dominio. La cuenta puede
-quedarse pausada, no cuesta nada.
-
-**Por qué, y esto deroga lo que se dijo el 9:** arreglar la caché hunde las
-invocaciones, la CPU y la transferencia de origen, pero **no las Edge
-Requests** —una página servida desde la caché sigue contando una—. Con 1,9M
-contra un tope de 1M, es probable que Hobby ya no diera, arreglado y todo. Y el
-escalón siguiente de Vercel son 20 $/mes de golpe: no hay nada entre medias.
-
-**Cloudflare se miró y se descartó**, aunque sean $5 y no $20: allí Next corre
-sobre `@opennextjs/cloudflare`, y sin caché incremental sobre R2 el ISR se cae a
-SSR en cada petición —o sea, el problema que se acaba de arreglar—. Esa caché
-tiene fallos abiertos hoy (escrituras que fallan, 503 recurrentes). No se pone
-la pieza recién arreglada encima de la menos madura.
-
-En un VPS, en cambio, `next start` es nativo y el ISR va a disco: funciona
-exactamente como se verificó en local.
-
-**Lo que se lleva la máquina:** la web Y el trabajador de ingesta, que era la
-otra mitad del plan del 3 de septiembre. `trabajador.cmd` deja de hacer falta:
-lo sustituye un servicio de systemd que además arranca solo al reiniciar.
-
-**Lo que hay que saber y no olvidar:**
-
-- **El `.env` del servidor lleva la `service_role` y la `DATABASE_URL`**, así que
-  el proceso de la web las tiene en su entorno. En Vercel estaban deliberadamente
-  fuera. No llegan al navegador —Next solo empaqueta las `NEXT_PUBLIC_*`— pero
-  es una diferencia real. Separarlas exige tocar `next.config.ts`, que carga el
-  `.env` de la raíz para el build.
-- **Desplegar es `despliegue/desplegar.sh`**, y construye en `.next-build` antes
-  de cambiar de sitio. No es manía: construir sobre `.next` le borra el suelo al
-  servidor que está sirviendo, que es el tropiezo ya contado en `next.config.ts`.
-- **El tiempo de servicio pasa a ser nuestro.** Los parches van solos; lo demás,
-  no.
+- **`app/robots.ts` cierra todo** (`Disallow: /`) y **el sitemap se borró**,
+  con `lib/sitemap-datos.ts`. Lo que tumbó Vercel en agosto fue el rastreo:
+  1,9M de peticiones al mes contra el tope de 1M, y una página servida desde
+  la caché sigue contando una.
+- **`X-Robots-Tag: noindex, nofollow`** en todas las respuestas, desde
+  `next.config.ts`, para quien llegue por un enlace sin leer el robots.
+- **`/api/despertar` + el cron de `vercel.json`**: una consulta al día para que
+  Supabase no vuelva a pausar el proyecto. Necesita la variable `CRON_SECRET`
+  en Vercel; sin ella responde 401 y no hace nada.
+- **El trabajador de ingesta no corre en ningún sitio.** El catálogo está en la
+  base y para enseñarlo no necesita moverse. Si hiciera falta, se lanza a mano
+  desde esta máquina (ver «Cómo se lanza cada cosa»).
 
 ### 2d. Los relacionados tumban la ficha del artista
 
@@ -639,8 +611,10 @@ inventario? Medir antes de construir.
 
 ## Publicación
 
-**El sitio está en https://artlas.softie.dev desde el 28 de agosto de 2026.**
-El código, en https://github.com/aironpower/artlas (privado). Cada push a
+**El sitio estuvo en https://artlas.softie.dev desde el 28 de agosto de 2026**
+(en Vercel, luego en un servidor y, desde el 7 de noviembre, otra vez en
+Vercel: ver 2c). El código, en https://github.com/aironpower/artlas (público
+desde el 7 de noviembre). Cada push a
 `master` publica solo. El proyecto de Vercel se llama `web`, no `artlas`.
 
 Comprobado en producción el día que se subió: las tres portadas, buscador,
