@@ -1,5 +1,41 @@
 # Artlas
 
+**English summary.** The rest of the documentation is in Spanish.
+
+Artlas is a world map of artworks: a catalogue of major works, geolocated in
+the museum where they are exhibited, searchable by artist, movement, year and
+category, with user ratings for works and museums. It is a personal project I
+designed and built in August and September 2026. It ran at artlas.softie.dev
+for a few weeks and is now offline.
+
+- 135,258 published works from 48 museums (269,159 in the catalogue), in
+  Spanish, English and French.
+- Interactive world map, search with filters, artwork, museum and artist
+  pages, "artworks near me", and an admin review panel.
+
+**Stack:** Next.js 15 (App Router), React 19, TypeScript, Supabase
+(PostgreSQL with PostGIS, Row Level Security, auth), MapLibre GL, a Node.js
+ingestion CLI and worker. Deployed on Vercel, then on a Hetzner VPS with Caddy
+and systemd.
+
+**Architecture:** two apps on one database, in npm workspaces.
+
+- `packages/ingest` builds the catalogue from Wikidata (SPARQL) and museum
+  APIs (Art Institute of Chicago, The Met, Harvard). Wikidata is the backbone:
+  coverage, coordinates and movements. Museum APIs add high-resolution IIIF
+  images and catalogue data.
+- `apps/web` is the public app.
+
+**Worth reading** (in Spanish, with measurements, under «Lo que costó
+descubrir»): why every Wikidata query is scoped to one museum, why slow SPARQL
+queries were split instead of optimised, how Wikimedia thumbnail URLs are built
+to avoid hotlink blocking, and a PostGIS bug where a 360° bounding box returned
+an empty world map.
+
+---
+
+## Artlas (español)
+
 Mapa mundial de obras de arte. Un catálogo de las obras más importantes del
 mundo, geolocalizadas en el museo donde se exponen, filtrable por autor,
 movimiento, año y categoría, con valoraciones de usuarios sobre obras y museos.
